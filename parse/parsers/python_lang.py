@@ -26,16 +26,15 @@ class PythonParser:
             self.symbols[type] = []
 
     def _enclosing_class_for_direct_method(self, node: Node) -> Optional[Node]:
-        result = None
         parent = node.parent
         while parent is not None and parent.type == "decorated_definition":
-            result = parent.parent
+            parent = parent.parent
         if parent is None or parent.type != "block":
             return None
         grandparent = parent.parent
         if grandparent is not None and grandparent.type in self.class_types:
-            result = grandparent
-        return result
+            return grandparent
+        return None
 
     def _is_direct_class_method(self, node: Node) -> bool:
         return (
