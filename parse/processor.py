@@ -18,7 +18,7 @@ TABLE_BATCH_MAP = {
 }
 
 
-class CodeParser:
+class CodeProcessor:
     def __init__(self, db: CodeDB, root: Path):
         self.db = db
         self.root = root
@@ -75,22 +75,24 @@ class CodeParser:
                 if self.db.file_is_stale(file_relative_path, file_hash):
                     file_extension = file_relative_path.suffix
                     dir_path = file_relative_path.parent
-                    if file_extension not in FILE_EXTENSION_MAPPING:
-                        self.files_skipped += 1
-                        continue
-                    self._parse_file(file_path)
-                    self.files_indexed += 1
-
                     self.db_batches["files"].append(
                         {
                             "dir_path": str(dir_path),  # NOTE: to lookup directory id
                             "name": file_name,
                             "path": str(file_relative_path),
-                            "language": FILE_EXTENSION_MAPPING[file_extension],
+                            "language": FILE_EXTENSION_MAPPING.get(
+                                file_extension, None
+                            ),
                             "file_hash": file_hash,
                             "line_count": 0,
                         }
                     )
+
+                    if file_extension not in FILE_EXTENSION_MAPPING:
+                        self.files_skipped += 1
+                        continue
+                    self._parse_file(file_path)
+                    self.files_indexed += 1
                 else:
                     continue
             else:

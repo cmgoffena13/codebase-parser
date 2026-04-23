@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from parse.db import CodeDB
-from parse.parser import CodeParser
+from parse.processor import CodeProcessor
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 TEST_ROOT = Path("/Users/cortlandgoffena/Documents/repos/coder")
@@ -9,7 +9,7 @@ TEST_ROOT = Path("/Users/cortlandgoffena/Documents/repos/coder")
 
 def main():
     db = CodeDB(PROJECT_ROOT)
-    parser = CodeParser(db, TEST_ROOT)
+    parser = CodeProcessor(db, TEST_ROOT)
     parser.parse()
 
 
