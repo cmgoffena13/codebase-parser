@@ -6,11 +6,7 @@ import xxhash
 
 from parse.db import CodeDB
 from parse.git_utils import GIT_IGNORE_LIST  # NOTE: placeholder for now
-
-FILE_EXTENSION_MAPPING = {
-    ".py": "python",
-    ".rs": "rust",
-}
+from parse.parsers.factory import FILE_EXTENSION_MAPPING
 
 TABLE_BATCH_MAP = {
     "directories",
