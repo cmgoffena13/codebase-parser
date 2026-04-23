@@ -83,7 +83,7 @@ class CodeParser:
 
                     self.db_batches["files"].append(
                         {
-                            "dir_path": str(dir_path),
+                            "dir_path": str(dir_path),  # NOTE: to lookup directory id
                             "name": file_name,
                             "path": str(file_relative_path),
                             "language": FILE_EXTENSION_MAPPING[file_extension],
