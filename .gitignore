@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 
 # Database
+code.db
 *.db
 *.db-journal
 

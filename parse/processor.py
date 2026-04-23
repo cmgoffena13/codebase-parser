@@ -6,7 +6,7 @@ import xxhash
 
 from parse.db import CodeDB
 from parse.git_utils import GIT_IGNORE_LIST  # NOTE: placeholder for now
-from parse.parsers.factory import FILE_EXTENSION_MAPPING
+from parse.parsers.factory import FILE_EXTENSION_MAPPING, ParserFactory
 
 TABLE_BATCH_MAP = {
     "directories",
@@ -87,14 +87,17 @@ class CodeProcessor:
                     if file_extension not in FILE_EXTENSION_MAPPING:
                         self.files_skipped += 1
                         continue
-                    self._parse_file(file_path)
+                    parser = ParserFactory.get_parser(
+                        FILE_EXTENSION_MAPPING[file_extension]
+                    )
+                    parser.parse(file_bytes, file_name)
                     self.files_indexed += 1
                 else:
                     continue
             else:
                 continue
 
-    def parse(self, full: bool = False) -> None:
+    def process(self, full: bool = False) -> None:
         start_time = time.time()
         for directory_path, directory_names, file_names in os.walk(self.root):
             directory_names[:] = [

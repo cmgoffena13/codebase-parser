@@ -9,8 +9,8 @@ TEST_ROOT = Path("/Users/cortlandgoffena/Documents/repos/coder")
 
 def main():
     db = CodeDB(PROJECT_ROOT)
-    parser = CodeProcessor(db, TEST_ROOT)
-    parser.parse()
+    processor = CodeProcessor(db, TEST_ROOT)
+    processor.process()
 
 
 if __name__ == "__main__":
