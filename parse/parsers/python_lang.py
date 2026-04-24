@@ -56,7 +56,6 @@ class PythonParser:
                         module_text = self._span_text(module).strip()
                         names.append(f"{module_text}.*" if module_text else "*")
                         break
-            return names
 
         if node.type == "import_statement":
             for child in node.children:
@@ -64,7 +63,6 @@ class PythonParser:
                     text = self._span_text(child).strip()
                     if text:
                         names.append(text)
-            return names
 
         return names
 
