@@ -1,7 +1,8 @@
 import re
 from typing import Optional
 
-from tree_sitter import Node
+from tree_sitter import Language, Node, Parser
+from tree_sitter_python import language as python_language
 
 TYPES = {
     "function",
@@ -14,9 +15,6 @@ TYPES = {
 
 class PythonParser:
     def __init__(self):
-        from tree_sitter import Language, Parser
-        from tree_sitter_python import language as python_language
-
         self.parser = Parser(Language(python_language()))
         self.docstring_re = re.compile(r'"""(.*?)"""', re.DOTALL)
         self.function_types = {"function_definition"}
@@ -28,16 +26,22 @@ class PythonParser:
             self.symbols[type] = []
 
     def _definition_name(self, node: Node) -> str:
-        """Decode the ``name`` field (``identifier``) for a class or function node."""
-        name_node = node.child_by_field_name("name")
-        if name_node is None or name_node.text is None:
-            return ""
-        text = name_node.text
-        if isinstance(text, (bytes, bytearray)):
-            return text.decode("utf-8", errors="replace")
-        if isinstance(text, memoryview):
-            return text.tobytes().decode("utf-8", errors="replace")
-        return str(text)
+        """Return the written name for a ``class_definition`` or ``function_definition``.
+
+        For ``class Foo`` or ``def bar``, tree-sitter does not keep ``"Foo"`` on the
+        class/function node itself. It stores a child node (field ``"name"``, node type
+        ``identifier``) that points at the name in the source. We read that child's
+        ``.text`` (often raw bytes from the parse buffer) and return a normal ``str``.
+        """
+        identifier = node.child_by_field_name("name")
+        raw = identifier.text
+        if isinstance(raw, str):
+            return raw
+        if isinstance(raw, memoryview):
+            raw = raw.tobytes()
+        if isinstance(raw, (bytes, bytearray)):
+            return raw.decode("utf-8", errors="replace")
+        return str(raw)
 
     def _get_signature(self, file_lines: list[str], start: int) -> str:
         return file_lines[start] if file_lines else ""
@@ -112,6 +116,7 @@ class PythonParser:
                     "docstring": docstring,
                 }
             )
+            print(docstring)
 
         if node.type in self.function_types:
             cls = self._owning_class_definition(node)
@@ -138,7 +143,6 @@ class PythonParser:
                         "docstring": docstring,
                     }
                 )
-                print(f"class method: {class_name}.{method_name}")
             else:
                 name = self._definition_name(node)
                 first = node.start_point.row + 1
