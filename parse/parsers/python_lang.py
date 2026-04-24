@@ -27,6 +27,18 @@ class PythonParser:
         for type in TYPES:
             self.symbols[type] = []
 
+    def _definition_name(self, node: Node) -> str:
+        """Decode the ``name`` field (``identifier``) for a class or function node."""
+        name_node = node.child_by_field_name("name")
+        if name_node is None or name_node.text is None:
+            return ""
+        text = name_node.text
+        if isinstance(text, (bytes, bytearray)):
+            return text.decode("utf-8", errors="replace")
+        if isinstance(text, memoryview):
+            return text.tobytes().decode("utf-8", errors="replace")
+        return str(text)
+
     def _get_signature(self, file_lines: list[str], start: int) -> str:
         return file_lines[start] if file_lines else ""
 
@@ -43,22 +55,29 @@ class PythonParser:
         m = self.docstring_re.search(text)
         return m.group(1) if m else None
 
-    def _enclosing_class_for_direct_method(self, node: Node) -> Optional[Node]:
-        parent = node.parent
-        while parent is not None and parent.type == "decorated_definition":
-            parent = parent.parent
-        if parent is None or parent.type != "block":
-            return None
-        grandparent = parent.parent
-        if grandparent is not None and grandparent.type in self.class_types:
-            return grandparent
-        return None
+    def _owning_class_definition(self, node: Node) -> Optional[Node]:
+        """Return the ``class_definition`` for the class that contains this function, if any.
 
-    def _is_direct_class_method(self, node: Node) -> bool:
-        return (
-            node.type in self.function_types
-            and self._enclosing_class_for_direct_method(node) is not None
-        )
+        Returns None at module scope, inside another function, and similar cases where
+        walking up does not reach ``class_definition`` -> ``block`` -> this function.
+
+        If the function has decorators, tree-sitter wraps it in a ``decorated_definition``
+        parent; the loop climbs past that wrapper node only (not past the function itself).
+        ``@classmethod``, ``@staticmethod``, and other decorators still end up classified
+        as class methods when the function sits in a class body.
+        """
+        ancestor = node.parent
+        while ancestor is not None and ancestor.type == "decorated_definition":
+            ancestor = ancestor.parent
+
+        if ancestor is None or ancestor.type != "block":
+            return None
+
+        class_node = ancestor.parent
+        if class_node is None or class_node.type not in self.class_types:
+            return None
+
+        return class_node
 
     def _walk(self, node: Node, file_name: str, file_lines: list[str]) -> None:
         for child in node.children:
@@ -74,7 +93,7 @@ class PythonParser:
         self, node: Node, file_name: str, file_lines: list[str]
     ) -> None:
         if node.type in self.class_types:
-            class_name = node.child_by_field_name("name")
+            class_name = self._definition_name(node)
             first = node.start_point.row + 1
             last = node.end_point.row + 1
             line_count = last - first + 1
@@ -95,10 +114,10 @@ class PythonParser:
             )
 
         if node.type in self.function_types:
-            cls = self._enclosing_class_for_direct_method(node)
+            cls = self._owning_class_definition(node)
             if cls is not None:
-                class_name = cls.child_by_field_name("name")
-                method_name = node.child_by_field_name("name")
+                class_name = self._definition_name(cls)
+                method_name = self._definition_name(node)
                 first = node.start_point.row + 1
                 last = node.end_point.row + 1
                 line_count = last - first + 1
@@ -107,7 +126,8 @@ class PythonParser:
                 self.symbols["method"].append(
                     {
                         "file_name": file_name,  # NOTE: Needed to lookup file id.
-                        "method_name": class_name,
+                        "name": method_name,
+                        "class_name": class_name,
                         "qualified_name": f"{class_name}.{method_name}",
                         "kind": "method",
                         "line_start": first,
@@ -118,27 +138,27 @@ class PythonParser:
                         "docstring": docstring,
                     }
                 )
+                print(f"class method: {class_name}.{method_name}")
             else:
-                if not self._is_direct_class_method(node):
-                    name = node.child_by_field_name("name")
-                    first = node.start_point.row + 1
-                    last = node.end_point.row + 1
-                    line_count = last - first + 1
-                    signature = self._get_signature(file_lines, first)
-                    docstring = self._get_docstring(file_lines, first, last)
-                    self.symbols["function"].append(
-                        {
-                            "file_name": file_name,  # NOTE: Needed to lookup file id.
-                            "name": name,
-                            "line_start": first,
-                            "line_end": last,
-                            "line_count": line_count,
-                            "kind": "function",
-                            "language": "python",
-                            "signature": signature,
-                            "docstring": docstring,
-                        }
-                    )
+                name = self._definition_name(node)
+                first = node.start_point.row + 1
+                last = node.end_point.row + 1
+                line_count = last - first + 1
+                signature = self._get_signature(file_lines, first)
+                docstring = self._get_docstring(file_lines, first, last)
+                self.symbols["function"].append(
+                    {
+                        "file_name": file_name,  # NOTE: Needed to lookup file id.
+                        "name": name,
+                        "line_start": first,
+                        "line_end": last,
+                        "line_count": line_count,
+                        "kind": "function",
+                        "language": "python",
+                        "signature": signature,
+                        "docstring": docstring,
+                    }
+                )
 
     def _parse_call(self, node: Node, file_name: str, file_lines: list[str]) -> None:
         pass
