@@ -61,9 +61,9 @@ class PythonParser:
         if node.type == "import_statement":
             for child in node.children:
                 if child.type in ("dotted_name", "aliased_import"):
-                    t = self._span_text(child).strip()
-                    if t:
-                        names.append(t)
+                    text = self._span_text(child).strip()
+                    if text:
+                        names.append(text)
             return names
 
         return names
@@ -170,6 +170,7 @@ class PythonParser:
             self.symbols["function"].append(
                 {
                     "file_name": file_name,  # NOTE: Needed to lookup file id.
+                    "qualified_name": None,
                     "name": name,
                     "line_start": first,
                     "line_end": last,
@@ -191,6 +192,7 @@ class PythonParser:
             self.symbols["class"].append(
                 {
                     "file_name": file_name,  # NOTE: Needed to lookup file id.
+                    "qualified_name": None,
                     "name": class_name,
                     "kind": "class",
                     "line_start": first,
@@ -215,6 +217,7 @@ class PythonParser:
         self.symbols["call"].append(
             {
                 "file_name": file_name,  # NOTE: Needed to lookup file id.
+                "qualified_name": None,
                 "name": name,
                 "kind": "call",
                 "line_start": first,
@@ -236,6 +239,7 @@ class PythonParser:
             self.symbols["import"].append(
                 {
                     "file_name": file_name,  # NOTE: Needed to lookup file id.
+                    "qualified_name": None,
                     "name": name,
                     "kind": "import",
                     "line_start": first,
