@@ -1,4 +1,4 @@
-from parse.parsers.python_lang import PythonParser
+from src.parsers.python_lang import PythonParser
 
 FILE_EXTENSION_MAPPING = {
     ".py": "python",
