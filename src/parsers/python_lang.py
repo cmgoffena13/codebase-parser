@@ -124,9 +124,11 @@ class PythonParser:
         if node.parent and node.parent.type == "decorated_definition":
             for child in node.parent.children:
                 if child.type == "decorator":
-                    dec_name = child.child_by_field_name("name")
-                    if dec_name:
-                        modifiers.append(dec_name.text.decode("utf-8"))
+                    dec_text = child.text.decode("utf-8", errors="replace").strip()
+                    if dec_text.startswith("@"):
+                        dec_text = dec_text[1:].strip()
+                    if dec_text:
+                        modifiers.append(dec_text)
 
         # Extract Base Classes (for classes only)
         base_classes = []
