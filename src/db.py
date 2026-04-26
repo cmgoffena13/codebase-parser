@@ -83,9 +83,8 @@ class CodeDB:
         """
         self.exec_tran(query, (file_ids, file_ids))
 
-    def get_symbols_snapshot(self) -> dict[int, dict]:
-        cursor = self.connection.execute(
-            """
+    def get_symbols_snapshot(self, file_id: int) -> dict[int, dict]:
+        query = """
             SELECT 
             id, 
             COALESCE(qualified_name, name) AS name,
@@ -95,7 +94,7 @@ class CodeDB:
             FROM symbols 
             WHERE file_id = ?
             """
-        )
+        cursor = self.connection.execute(query, (file_id,))
         return {
             tuple(row["name"], row["kind"]): {
                 "id": row["id"],

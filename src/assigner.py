@@ -8,7 +8,13 @@ class GlobalIDAssigner:
         self._counters = {}
         self._lock = threading.Lock()
         self.db = db
-        self.tables = {"directories", "files"}
+        self.tables = {
+            "directories",
+            "files",
+            "symbols",
+            "symbol_references",
+            "imports",
+        }
         self._get_starter_ids()
 
     def _init_table(self, table: str, start_id: int):

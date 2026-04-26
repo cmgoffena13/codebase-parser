@@ -13,22 +13,28 @@ class PythonParser:
         assigner: GlobalIDAssigner,
         db: CodeDB,
     ):
-        self.parser = Parser(Language(python_language()))
+        self.parser = Parser(Language(python_language.language()))
         self.assigner = assigner
         self.db = db
-        self.symbols_snapshot = self.db.get_symbols_snapshot()
+        self.symbols_snapshot = {}
         self.stack: List[Tuple[int, str, str]] = []
         self.symbols: List[Dict] = []
         self.imports: List[Dict] = []
-        self.references: List[Dict] = []
+        self.symbol_references_staging: List[Dict] = []
 
     def parse(
         self, file_id: int, file_bytes: bytes
     ) -> Tuple[List[Dict], List[Dict], List[Dict]]:
+        self.stack = []
+        self.symbols = []
+        self.imports = []
+        self.symbol_references_staging = []
+
         tree = self.parser.parse(file_bytes)
         root_node = tree.root_node
+        self.symbols_snapshot = self.db.get_symbols_snapshot(file_id)
         self._walk(root_node, file_id)
-        return self.symbols, self.imports, self.references
+        return self.symbols, self.imports, self.symbol_references_staging
 
     def _walk(self, node: Node, file_id: int):
         """Recursive DFS traversal."""
@@ -56,7 +62,7 @@ class PythonParser:
 
         # 3. Recurse
         for child in node.children:
-            self._walk(child)
+            self._walk(child, file_id)
 
         # 4. Pop from stack if we pushed
         if symbol_id is not None:
@@ -280,7 +286,7 @@ class PythonParser:
         # If it's a simple name, we can't resolve it yet, so keep raw
         # But if it's "module.func", we keep "module.func"
 
-        self.refs_staging.append(
+        self.symbol_references_staging.append(
             {
                 "ref_symbol_name": target_name,
                 "ref_symbol_qualified_name": qualified_name,

@@ -1,3 +1,4 @@
+import json
 import os
 import time
 from pathlib import Path
@@ -12,6 +13,9 @@ from src.parsers.factory import FILE_EXTENSION_MAPPING, ParserFactory
 TABLE_BATCH_MAP = {
     "directories",
     "files",
+    "symbols",
+    "imports",
+    "symbol_references",
 }
 
 
@@ -49,7 +53,7 @@ class CodeProcessor:
             directory_id = self.assigner.reserve("directories", 1)[0]
             parent_row = self.directories_snapshot.get(directory_relative_path.parent)
             parent_id = None if parent_row is None else parent_row["id"]
-            depth = len(directory_relative_path.parts)
+            depth = len(directory_relative_path.parts) - 1
             self.db_batches["directories"].append(
                 {
                     "id": directory_id,
@@ -119,12 +123,12 @@ class CodeProcessor:
                 self.files_skipped += 1
                 return
             parser = ParserFactory.get_parser(
-                FILE_EXTENSION_MAPPING[file_extension], self.assigner
+                FILE_EXTENSION_MAPPING[file_extension], self.assigner, self.db
             )
-            symbols, references, imports = parser.parse(file_id, file_bytes)
+            symbols, imports, references = parser.parse(file_id, file_bytes)
             self.db_batches["symbols"].extend(symbols)
-            self.db_batches["references"].extend(references)
             self.db_batches["imports"].extend(imports)
+            self.db_batches["symbol_references"].extend(references)
             self.files_indexed += 1
         else:
             return
@@ -157,6 +161,7 @@ class CodeProcessor:
             self.last_full_parse = None
             self.last_incremental = time_now
 
+        print(json.dumps(self.db_batches.get("symbols", []), indent=4))
         self.db.set_watermark(self.last_full_parse, self.last_incremental)
 
         duration = time_now - start_time
