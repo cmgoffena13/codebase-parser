@@ -230,153 +230,121 @@ class PythonParser(ParserBase):
 
     def _extract_import(self, node: Node, file_id: int):
         """Extract Import Statement."""
-        import_path = ""
-        imported_symbol = ""
-        alias = None
-        import_type = "absolute"
+        line_number = node.start_point.row + 1
+        signature = node.text.decode("utf-8")
+        import_scope = "module" if not self.stack else "function"
 
         # Determine Type (Relative vs Absolute)
         if node.type == "import_from_statement":
-            level_node = node.child_by_field_name("level")
-            if level_node:
-                level = int(level_node.text.decode())
-                if level > 0:
-                    import_type = "relative"
+            import_type = "absolute"
+            import_path = ""
 
-            # Get imported names
-            # import_from_statement can have multiple names: from x import a, b
+            # Relative imports come through as `relative_import` nodes, e.g. `.base` / `..pkg`
+            relative_node = None
             for child in node.children:
+                if child.type == "relative_import":
+                    relative_node = child
+                    break
+            if relative_node is not None:
+                import_type = "relative"
+                import_path = relative_node.text.decode("utf-8")
+
+            # Absolute import fallback (e.g. `from typing import X`)
+            if not import_path:
+                for child in node.children:
+                    if child.type == "dotted_name":
+                        import_path = child.text.decode("utf-8")
+                        break
+
+            for child in node.children:
+                imported_symbol = None
+                alias = None
                 if child.type == "aliased_import":
                     name_node = child.child_by_field_name("name")
                     alias_node = child.child_by_field_name("alias")
-                    if name_node:
-                        imported_symbol = name_node.text.decode("utf-8")
-                        if alias_node:
-                            alias = alias_node.text.decode("utf-8")
-
-                        key = (import_path, imported_symbol)
-                        if key in self.imports_snapshot:
-                            self.imports_snapshot[key]["seen"] = True
-                            import_id = self.imports_snapshot[key]["id"]
-                        else:
-                            import_id = self.assigner.reserve("imports", 1)[0]
-                            self.imports_snapshot[key] = {
-                                "id": import_id,
-                                "seen": True,
-                            }
-                        self.imports.append(
-                            {
-                                "id": import_id,
-                                "file_id": file_id,
-                                "import_path": import_path,
-                                "imported_symbol": imported_symbol,
-                                "alias": alias,
-                                "line_number": node.start_point.row + 1,
-                                "import_type": import_type,
-                                "import_scope": "module"
-                                if not self.stack
-                                else "function",
-                                "signature": node.text.decode("utf-8"),
-                            }
-                        )
-                elif child.type == "dotted_name":
-                    # tree-sitter-python represents imported names as dotted_name nodes
-                    # (even for simple identifiers) after the module dotted_name.
-                    if not import_path:
-                        # first dotted_name is the module path (e.g. "typing")
-                        import_path = child.text.decode("utf-8")
+                    if not name_node:
                         continue
-
+                    imported_symbol = name_node.text.decode("utf-8")
+                    alias = alias_node.text.decode("utf-8") if alias_node else None
+                elif child.type == "dotted_name":
+                    # Skip the module part (absolute dotted_name or relative_import's dotted_name)
+                    if (
+                        relative_node is not None
+                        and child.start_byte < relative_node.end_byte
+                    ):
+                        continue
+                    if (
+                        relative_node is None
+                        and child.text.decode("utf-8") == import_path
+                    ):
+                        continue
                     imported_symbol = child.text.decode("utf-8")
-                    alias = None
 
-                    key = (import_path, imported_symbol)
-                    if key in self.imports_snapshot:
-                        self.imports_snapshot[key]["seen"] = True
-                        import_id = self.imports_snapshot[key]["id"]
-                    else:
-                        import_id = self.assigner.reserve("imports", 1)[0]
-                        self.imports_snapshot[key] = {
-                            "id": import_id,
-                            "seen": True,
-                        }
+                if imported_symbol is None:
+                    continue
 
-                    self.imports.append(
-                        {
-                            "id": import_id,
-                            "file_id": file_id,
-                            "import_path": import_path,
-                            "imported_symbol": imported_symbol,
-                            "alias": alias,
-                            "line_number": node.start_point.row + 1,
-                            "import_type": import_type,
-                            "import_scope": "module" if not self.stack else "function",
-                            "signature": node.text.decode("utf-8"),
-                        }
-                    )
+                key = (import_path, imported_symbol)
+                if key in self.imports_snapshot:
+                    self.imports_snapshot[key]["seen"] = True
+                    import_id = self.imports_snapshot[key]["id"]
+                else:
+                    import_id = self.assigner.reserve("imports", 1)[0]
+                    self.imports_snapshot[key] = {"id": import_id, "seen": True}
+
+                self.imports.append(
+                    {
+                        "id": import_id,
+                        "file_id": file_id,
+                        "import_path": import_path,
+                        "imported_symbol": imported_symbol,
+                        "alias": alias,
+                        "line_number": line_number,
+                        "import_type": import_type,
+                        "import_scope": import_scope,
+                        "signature": signature,
+                    }
+                )
 
         elif node.type == "import_statement":
-            # import x, y
             import_type = "absolute"
             for child in node.children:
+                import_path = None
+                alias = None
                 if child.type == "aliased_import":
                     name_node = child.child_by_field_name("name")
                     alias_node = child.child_by_field_name("alias")
-                    if name_node:
-                        import_path = name_node.text.decode("utf-8")
-                        if alias_node:
-                            alias = alias_node.text.decode("utf-8")
-
-                        key = (import_path, "")
-                        if key in self.imports_snapshot:
-                            self.imports_snapshot[key]["seen"] = True
-                            import_id = self.imports_snapshot[key]["id"]
-                        else:
-                            import_id = self.assigner.reserve("imports", 1)[0]
-                            self.imports_snapshot[key] = {
-                                "id": import_id,
-                                "seen": True,
-                            }
-                        self.imports.append(
-                            {
-                                "id": import_id,
-                                "file_id": file_id,
-                                "import_path": import_path,
-                                "imported_symbol": "",
-                                "alias": alias,
-                                "line_number": node.start_point.row + 1,
-                                "import_type": import_type,
-                                "import_scope": "module"
-                                if not self.stack
-                                else "function",
-                                "signature": node.text.decode("utf-8"),
-                            }
-                        )
+                    if not name_node:
+                        continue
+                    import_path = name_node.text.decode("utf-8")
+                    alias = alias_node.text.decode("utf-8") if alias_node else None
                 elif child.type == "dotted_name":
                     import_path = child.text.decode("utf-8")
-                    key = (import_path, "")
-                    if key in self.imports_snapshot:
-                        self.imports_snapshot[key]["seen"] = True
-                        import_id = self.imports_snapshot[key]["id"]
-                    else:
-                        import_id = self.assigner.reserve("imports", 1)[0]
-                        self.imports_snapshot[key] = {
-                            "id": import_id,
-                            "seen": True,
-                        }
-                    self.imports.append(
-                        {
-                            "id": import_id,
-                            "file_id": file_id,
-                            "import_path": import_path,
-                            "imported_symbol": "",
-                            "alias": None,
-                            "line_number": node.start_point.row + 1,
-                            "import_type": import_type,
-                            "import_scope": "module" if not self.stack else "function",
-                            "signature": node.text.decode("utf-8"),
-                        }
-                    )
+
+                if import_path is None:
+                    continue
+
+                imported_symbol = ""
+                key = (import_path, imported_symbol)
+                if key in self.imports_snapshot:
+                    self.imports_snapshot[key]["seen"] = True
+                    import_id = self.imports_snapshot[key]["id"]
+                else:
+                    import_id = self.assigner.reserve("imports", 1)[0]
+                    self.imports_snapshot[key] = {"id": import_id, "seen": True}
+
+                self.imports.append(
+                    {
+                        "id": import_id,
+                        "file_id": file_id,
+                        "import_path": import_path,
+                        "imported_symbol": imported_symbol,
+                        "alias": alias,
+                        "line_number": line_number,
+                        "import_type": import_type,
+                        "import_scope": import_scope,
+                        "signature": signature,
+                    }
+                )
 
     def _extract_reference(self, node: Node, ref_kind: str, file_id: int):
         """Extract Reference (Call, Access, Type)."""
