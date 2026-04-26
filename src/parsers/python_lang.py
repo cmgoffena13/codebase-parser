@@ -43,7 +43,7 @@ class PythonParser(ParserBase):
         self._walk(root_node, file_id, file_bytes)
         return self.symbols, self.imports, self.symbol_references_staging
 
-    def _walk(self, node: Node, file_id: int, file_bytes: bytes):
+    def _walk(self, node: Node, file_id: int, file_bytes: bytes) -> None:
         """Recursive DFS traversal."""
         # 1. Extract Data for CURRENT node
         self._process_node(node, file_id)
@@ -75,7 +75,7 @@ class PythonParser(ParserBase):
         if symbol_id is not None:
             self.stack.pop()
 
-    def _process_node(self, node: Node, file_id: int):
+    def _process_node(self, node: Node, file_id: int) -> None:
         """Handle Imports and References."""
         # --- IMPORTS ---
         if node.type in ("import_statement", "import_from_statement"):
@@ -228,7 +228,7 @@ class PythonParser(ParserBase):
                 "base_classes": str(base_classes) if base_classes else None,
             }
 
-    def _extract_import(self, node: Node, file_id: int):
+    def _extract_import(self, node: Node, file_id: int) -> None:
         """Extract Import Statement."""
         line_number = node.start_point.row + 1
         signature = node.text.decode("utf-8")
@@ -342,7 +342,7 @@ class PythonParser(ParserBase):
                         }
                     )
 
-    def _extract_reference(self, node: Node, ref_kind: str, file_id: int):
+    def _extract_reference(self, node: Node, ref_kind: str, file_id: int) -> None:
         """Extract Reference (Call, Access, Type)."""
 
         target_name = ""
@@ -380,7 +380,6 @@ class PythonParser(ParserBase):
         key = (target_name, ref_kind)
         if key in self.symbols_references_snapshot:
             self.symbols_references_snapshot[key]["seen"] = True
-            return
         else:
             self.symbol_references_staging.append(
                 {
@@ -392,3 +391,4 @@ class PythonParser(ParserBase):
                     "context": node.text.decode("utf-8"),
                 }
             )
+        return
