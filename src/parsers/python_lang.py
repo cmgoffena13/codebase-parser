@@ -71,12 +71,11 @@ class PythonParser(ParserBase):
             "annotated_assignment",
             "augmented_assignment",
         ):
-            # Variable symbols (module/class scope; skip locals for now)
-            if not self.stack or self.stack[-1][2] == "class":
-                for symbol_data in self._extract_variable_symbols(
-                    node, file_id, file_bytes
-                ):
-                    self.symbols.append(symbol_data)
+            # Variable symbols (module/class/function scope)
+            for symbol_data in self._extract_variable_symbols(
+                node, file_id, file_bytes
+            ):
+                self.symbols.append(symbol_data)
 
         # 3. Recurse
         for child in node.children:
@@ -149,7 +148,12 @@ class PythonParser(ParserBase):
                 )
         else:
             symbol_id = self.assigner.reserve("symbols", 1)[0]
-            self.symbols_snapshot[key] = {"id": symbol_id, "seen": True}
+            self.symbols_snapshot[key] = {
+                "id": symbol_id,
+                "seen": True,
+                "line_start": line_start,
+                "line_end": line_end,
+            }
             symbols.append(
                 {
                     "id": symbol_id,
