@@ -105,6 +105,58 @@ class CodeDB:
             for row in cursor
         }
 
+    def delete_symbols(self, symbols: dict[tuple[str, str], dict]) -> None:
+        symbol_ids = [symbol["id"] for symbol in symbols.values() if not symbol["seen"]]
+        if not symbol_ids:
+            return
+        query = """
+        DELETE FROM symbols WHERE id IN (?)
+        """
+        self.exec_tran(query, (symbol_ids,))
+
+    def get_symbol_references_snapshot(
+        self, symbol_id: int
+    ) -> dict[tuple[str, str], dict]:
+        query = """
+        SELECT
+        id,
+        CASE 
+            WHEN ref_symbol_id IS NULL 
+            THEN ref_symbol_name 
+            ELSE COALESCE(ref_symbol_qualified_name, ref_symbol_name) 
+        END AS name,
+        ref_kind,
+        source_line
+        FROM symbol_references
+        WHERE source_file_id = ?
+        """
+        cursor = self.connection.execute(query, (symbol_id,))
+        return {
+            (row["name"], row["ref_kind"]): {
+                "id": row["id"],
+                "seen": False,
+            }
+            for row in cursor
+        }
+
+    def get_imports_snapshot(self, file_id: int) -> dict[tuple[str, str], dict]:
+        query = """
+        SELECT
+        id,
+        import_path,
+        imported_symbol
+        FROM imports
+        WHERE file_id = ?
+        """
+        cursor = self.connection.execute(query, (file_id,))
+        return {
+            (row["import_path"], row["imported_symbol"]): {
+                "id": row["id"],
+                "seen": False,
+            }
+            for row in cursor
+        }
+
     def close(self):
         if not self.connection_closed:
             self.connection.close()

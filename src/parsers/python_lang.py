@@ -18,11 +18,13 @@ class PythonParser(ParserBase):
         self.parser = Parser(Language(python_language.language()))
         self.assigner = assigner
         self.db = db
-        self.symbols_snapshot = {}
         self.stack: List[Tuple[int, str, str]] = []
         self.symbols: List[Dict] = []
         self.imports: List[Dict] = []
         self.symbol_references_staging: List[Dict] = []
+        self.symbols_snapshot = {}
+        self.symbols_references_snapshot = {}
+        self.imports_snapshot = {}
 
     def parse(
         self, file_id: int, file_bytes: bytes
@@ -31,10 +33,13 @@ class PythonParser(ParserBase):
         self.symbols = []
         self.imports = []
         self.symbol_references_staging = []
-
         tree = self.parser.parse(file_bytes)
         root_node = tree.root_node
         self.symbols_snapshot = self.db.get_symbols_snapshot(file_id)
+        self.symbols_references_snapshot = self.db.get_symbol_references_snapshot(
+            file_id
+        )
+        self.imports_snapshot = self.db.get_imports_snapshot(file_id)
         self._walk(root_node, file_id, file_bytes)
         return self.symbols, self.imports, self.symbol_references_staging
 
@@ -172,24 +177,56 @@ class PythonParser(ParserBase):
                         docstring = raw.strip("\"'")
                     break
 
-        sym_id = self.assigner.reserve("symbols", 1)[0]
+        key = (name, kind)
+        if key in self.symbols_snapshot:
+            self.symbols_snapshot[name]["seen"] = True
+            symbol_id = self.symbols_snapshot[name]["id"]
 
-        return {
-            "id": sym_id,
-            "file_id": file_id,
-            "parent_id": self.stack[-1][0] if self.stack else None,
-            "name": name,
-            "qualified_name": qualified_name,
-            "kind": kind,
-            "line_start": line_start,
-            "line_end": line_end,
-            "line_count": line_end - line_start + 1,
-            "signature": signature,
-            "docstring": docstring,
-            "modifiers": str(modifiers) if modifiers else None,
-            "language": "python",
-            "base_classes": str(base_classes) if base_classes else None,
-        }
+            # NOTE: if lines changed, we need to update the symbol so return
+            if (line_start, line_end) != (
+                self.symbols_snapshot[name]["line_start"],
+                self.symbols_snapshot[name]["line_end"],
+            ):
+                return {
+                    "id": symbol_id,
+                    "file_id": file_id,
+                    "parent_id": self.stack[-1][0] if self.stack else None,
+                    "name": name,
+                    "qualified_name": qualified_name,
+                    "kind": kind,
+                    "line_start": line_start,
+                    "line_end": line_end,
+                    "line_count": line_end - line_start + 1,
+                    "signature": signature,
+                    "docstring": docstring,
+                    "modifiers": str(modifiers) if modifiers else None,
+                    "language": "python",
+                    "base_classes": str(base_classes) if base_classes else None,
+                }
+            else:
+                return None
+        else:
+            symbol_id = self.assigner.reserve("symbols", 1)[0]
+            self.symbols_snapshot[key] = {
+                "id": symbol_id,
+                "seen": True,
+            }
+            return {
+                "id": symbol_id,
+                "file_id": file_id,
+                "parent_id": self.stack[-1][0] if self.stack else None,
+                "name": name,
+                "qualified_name": qualified_name,
+                "kind": kind,
+                "line_start": line_start,
+                "line_end": line_end,
+                "line_count": line_end - line_start + 1,
+                "signature": signature,
+                "docstring": docstring,
+                "modifiers": str(modifiers) if modifiers else None,
+                "language": "python",
+                "base_classes": str(base_classes) if base_classes else None,
+            }
 
     def _extract_import(self, node: Node, file_id: int):
         """Extract Import Statement."""
@@ -221,20 +258,30 @@ class PythonParser(ParserBase):
                         if alias_node:
                             alias = alias_node.text.decode("utf-8")
 
-                        self.imports.append(
-                            {
-                                "file_id": file_id,
-                                "import_path": import_path,
-                                "imported_symbol": imported_symbol,
-                                "alias": alias,
-                                "line_number": node.start_point.row + 1,
-                                "import_type": import_type,
-                                "import_scope": "module"
-                                if not self.stack
-                                else "function",
-                                "signature": node.text.decode("utf-8"),
+                        key = (import_path, imported_symbol)
+                        if key in self.imports_snapshot:
+                            self.imports_snapshot[key]["seen"] = True
+                        else:
+                            import_id = self.assigner.reserve("imports", 1)[0]
+                            self.imports_snapshot[key] = {
+                                "id": import_id,
+                                "seen": True,
                             }
-                        )
+                            self.imports.append(
+                                {
+                                    "id": import_id,
+                                    "file_id": file_id,
+                                    "import_path": import_path,
+                                    "imported_symbol": imported_symbol,
+                                    "alias": alias,
+                                    "line_number": node.start_point.row + 1,
+                                    "import_type": import_type,
+                                    "import_scope": "module"
+                                    if not self.stack
+                                    else "function",
+                                    "signature": node.text.decode("utf-8"),
+                                }
+                            )
                 elif child.type == "dotted_name" and not import_path:
                     # Fallback for simple "from x import y"
                     pass
@@ -251,20 +298,30 @@ class PythonParser(ParserBase):
                         if alias_node:
                             alias = alias_node.text.decode("utf-8")
 
-                        self.imports.append(
-                            {
-                                "file_id": file_id,
-                                "import_path": import_path,
-                                "imported_symbol": "",
-                                "alias": alias,
-                                "line_number": node.start_point.row + 1,
-                                "import_type": import_type,
-                                "import_scope": "module"
-                                if not self.stack
-                                else "function",
-                                "signature": node.text.decode("utf-8"),
+                        key = (import_path, "")
+                        if key in self.imports_snapshot:
+                            self.imports_snapshot[key]["seen"] = True
+                        else:
+                            import_id = self.assigner.reserve("imports", 1)[0]
+                            self.imports_snapshot[key] = {
+                                "id": import_id,
+                                "seen": True,
                             }
-                        )
+                            self.imports.append(
+                                {
+                                    "id": import_id,
+                                    "file_id": file_id,
+                                    "import_path": import_path,
+                                    "imported_symbol": "",
+                                    "alias": alias,
+                                    "line_number": node.start_point.row + 1,
+                                    "import_type": import_type,
+                                    "import_scope": "module"
+                                    if not self.stack
+                                    else "function",
+                                    "signature": node.text.decode("utf-8"),
+                                }
+                            )
 
     def _extract_reference(self, node: Node, ref_kind: str, file_id: int):
         """Extract Reference (Call, Access, Type)."""
@@ -301,13 +358,18 @@ class PythonParser(ParserBase):
         # If it's a simple name, we can't resolve it yet, so keep raw
         # But if it's "module.func", we keep "module.func"
 
-        self.symbol_references_staging.append(
-            {
-                "ref_symbol_name": target_name,
-                "ref_symbol_qualified_name": qualified_name,
-                "source_file_id": file_id,
-                "source_line": node.start_point.row + 1,
-                "ref_kind": ref_kind,
-                "context": node.text.decode("utf-8"),
-            }
-        )
+        key = (target_name, ref_kind)
+        if key in self.symbols_references_snapshot:
+            self.symbols_references_snapshot[key]["seen"] = True
+            return
+        else:
+            self.symbol_references_staging.append(
+                {
+                    "ref_symbol_name": target_name,
+                    "ref_symbol_qualified_name": qualified_name,
+                    "source_file_id": file_id,
+                    "source_line": node.start_point.row + 1,
+                    "ref_kind": ref_kind,
+                    "context": node.text.decode("utf-8"),
+                }
+            )
