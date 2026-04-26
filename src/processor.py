@@ -162,7 +162,7 @@ class CodeProcessor:
             self.last_full_parse = None
             self.last_incremental = time_now
 
-        print(json.dumps(self.db_batches.get("symbols", []), indent=4))
+        print(json.dumps(self.db_batches.get("imports", []), indent=4))
         self.db.set_watermark(self.last_full_parse, self.last_incremental)
 
         duration = time_now - start_time

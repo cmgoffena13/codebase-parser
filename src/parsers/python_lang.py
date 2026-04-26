@@ -243,10 +243,6 @@ class PythonParser(ParserBase):
                 if level > 0:
                     import_type = "relative"
 
-            module_node = node.child_by_field_name("module")
-            if module_node:
-                import_path = module_node.text.decode("utf-8")
-
             # Get imported names
             # import_from_statement can have multiple names: from x import a, b
             for child in node.children:
@@ -261,30 +257,63 @@ class PythonParser(ParserBase):
                         key = (import_path, imported_symbol)
                         if key in self.imports_snapshot:
                             self.imports_snapshot[key]["seen"] = True
+                            import_id = self.imports_snapshot[key]["id"]
                         else:
                             import_id = self.assigner.reserve("imports", 1)[0]
                             self.imports_snapshot[key] = {
                                 "id": import_id,
                                 "seen": True,
                             }
-                            self.imports.append(
-                                {
-                                    "id": import_id,
-                                    "file_id": file_id,
-                                    "import_path": import_path,
-                                    "imported_symbol": imported_symbol,
-                                    "alias": alias,
-                                    "line_number": node.start_point.row + 1,
-                                    "import_type": import_type,
-                                    "import_scope": "module"
-                                    if not self.stack
-                                    else "function",
-                                    "signature": node.text.decode("utf-8"),
-                                }
-                            )
-                elif child.type == "dotted_name" and not import_path:
-                    # Fallback for simple "from x import y"
-                    pass
+                        self.imports.append(
+                            {
+                                "id": import_id,
+                                "file_id": file_id,
+                                "import_path": import_path,
+                                "imported_symbol": imported_symbol,
+                                "alias": alias,
+                                "line_number": node.start_point.row + 1,
+                                "import_type": import_type,
+                                "import_scope": "module"
+                                if not self.stack
+                                else "function",
+                                "signature": node.text.decode("utf-8"),
+                            }
+                        )
+                elif child.type == "dotted_name":
+                    # tree-sitter-python represents imported names as dotted_name nodes
+                    # (even for simple identifiers) after the module dotted_name.
+                    if not import_path:
+                        # first dotted_name is the module path (e.g. "typing")
+                        import_path = child.text.decode("utf-8")
+                        continue
+
+                    imported_symbol = child.text.decode("utf-8")
+                    alias = None
+
+                    key = (import_path, imported_symbol)
+                    if key in self.imports_snapshot:
+                        self.imports_snapshot[key]["seen"] = True
+                        import_id = self.imports_snapshot[key]["id"]
+                    else:
+                        import_id = self.assigner.reserve("imports", 1)[0]
+                        self.imports_snapshot[key] = {
+                            "id": import_id,
+                            "seen": True,
+                        }
+
+                    self.imports.append(
+                        {
+                            "id": import_id,
+                            "file_id": file_id,
+                            "import_path": import_path,
+                            "imported_symbol": imported_symbol,
+                            "alias": alias,
+                            "line_number": node.start_point.row + 1,
+                            "import_type": import_type,
+                            "import_scope": "module" if not self.stack else "function",
+                            "signature": node.text.decode("utf-8"),
+                        }
+                    )
 
         elif node.type == "import_statement":
             # import x, y
@@ -301,27 +330,53 @@ class PythonParser(ParserBase):
                         key = (import_path, "")
                         if key in self.imports_snapshot:
                             self.imports_snapshot[key]["seen"] = True
+                            import_id = self.imports_snapshot[key]["id"]
                         else:
                             import_id = self.assigner.reserve("imports", 1)[0]
                             self.imports_snapshot[key] = {
                                 "id": import_id,
                                 "seen": True,
                             }
-                            self.imports.append(
-                                {
-                                    "id": import_id,
-                                    "file_id": file_id,
-                                    "import_path": import_path,
-                                    "imported_symbol": "",
-                                    "alias": alias,
-                                    "line_number": node.start_point.row + 1,
-                                    "import_type": import_type,
-                                    "import_scope": "module"
-                                    if not self.stack
-                                    else "function",
-                                    "signature": node.text.decode("utf-8"),
-                                }
-                            )
+                        self.imports.append(
+                            {
+                                "id": import_id,
+                                "file_id": file_id,
+                                "import_path": import_path,
+                                "imported_symbol": "",
+                                "alias": alias,
+                                "line_number": node.start_point.row + 1,
+                                "import_type": import_type,
+                                "import_scope": "module"
+                                if not self.stack
+                                else "function",
+                                "signature": node.text.decode("utf-8"),
+                            }
+                        )
+                elif child.type == "dotted_name":
+                    import_path = child.text.decode("utf-8")
+                    key = (import_path, "")
+                    if key in self.imports_snapshot:
+                        self.imports_snapshot[key]["seen"] = True
+                        import_id = self.imports_snapshot[key]["id"]
+                    else:
+                        import_id = self.assigner.reserve("imports", 1)[0]
+                        self.imports_snapshot[key] = {
+                            "id": import_id,
+                            "seen": True,
+                        }
+                    self.imports.append(
+                        {
+                            "id": import_id,
+                            "file_id": file_id,
+                            "import_path": import_path,
+                            "imported_symbol": "",
+                            "alias": None,
+                            "line_number": node.start_point.row + 1,
+                            "import_type": import_type,
+                            "import_scope": "module" if not self.stack else "function",
+                            "signature": node.text.decode("utf-8"),
+                        }
+                    )
 
     def _extract_reference(self, node: Node, ref_kind: str, file_id: int):
         """Extract Reference (Call, Access, Type)."""
