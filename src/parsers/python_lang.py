@@ -1,3 +1,4 @@
+import ast
 from typing import Dict, List, Optional, Tuple
 
 import tree_sitter_python as python_language
@@ -150,10 +151,27 @@ class PythonParser:
         docstring = None
         body = node.child_by_field_name("body")
         if body:
-            for child in body.children:
-                if child.type == "string":
-                    # Remove quotes
-                    docstring = child.text.decode("utf-8").strip("\"'")
+            # In tree-sitter-python, docstrings usually appear as:
+            # block -> expression_statement -> string
+            for stmt in body.named_children:
+                str_node = None
+                if stmt.type == "expression_statement":
+                    # expression_statement's first named child is typically the string
+                    if stmt.named_children:
+                        candidate = stmt.named_children[0]
+                        if candidate.type == "string":
+                            str_node = candidate
+                elif stmt.type == "string":
+                    # fallback
+                    str_node = stmt
+
+                if str_node is not None:
+                    raw = str_node.text.decode("utf-8", errors="replace")
+                    try:
+                        # Handles single/double/triple quotes and escapes
+                        docstring = ast.literal_eval(raw)
+                    except Exception:
+                        docstring = raw.strip("\"'")
                     break
 
         # Reserve ID
