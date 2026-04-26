@@ -289,7 +289,6 @@ class PythonParser(ParserBase):
                 else:
                     import_id = self.assigner.reserve("imports", 1)[0]
                     self.imports_snapshot[key] = {"id": import_id, "seen": True}
-
                     self.imports.append(
                         {
                             "id": import_id,
@@ -329,7 +328,6 @@ class PythonParser(ParserBase):
                 else:
                     import_id = self.assigner.reserve("imports", 1)[0]
                     self.imports_snapshot[key] = {"id": import_id, "seen": True}
-
                     self.imports.append(
                         {
                             "id": import_id,
