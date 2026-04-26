@@ -4,14 +4,6 @@ from typing import Optional
 from tree_sitter import Language, Node, Parser
 from tree_sitter_python import language as python_language
 
-TYPES = {
-    "function",
-    "class",
-    "method",
-    "call",
-    "import",
-}
-
 
 class PythonParser:
     def __init__(self):
@@ -21,9 +13,7 @@ class PythonParser:
         self.class_types = {"class_definition"}
         self.call_types = {"call"}
         self.import_types = {"import_from_statement", "import_statement"}
-        self.symbols = {}
-        for type in TYPES:
-            self.symbols[type] = []
+        self.symbols = []
 
     def _span_text(self, node: Node | None) -> str:
         """Text of this node exactly as it appears in the source (any node type)."""
@@ -144,7 +134,7 @@ class PythonParser:
             line_count = last - first + 1
             signature = self._get_signature(file_lines, first)
             docstring = self._get_docstring(file_lines, first, last)
-            self.symbols["method"].append(
+            self.symbols.append(
                 {
                     "file_name": file_name,  # NOTE: Needed to lookup file id.
                     "name": method_name,
@@ -165,7 +155,7 @@ class PythonParser:
             line_count = last - first + 1
             signature = self._get_signature(file_lines, first)
             docstring = self._get_docstring(file_lines, first, last)
-            self.symbols["function"].append(
+            self.symbols.append(
                 {
                     "file_name": file_name,  # NOTE: Needed to lookup file id.
                     "qualified_name": None,
@@ -187,7 +177,7 @@ class PythonParser:
             last = node.end_point.row + 1
             line_count = last - first + 1
             signature = self._get_signature(file_lines, first)
-            self.symbols["class"].append(
+            self.symbols.append(
                 {
                     "file_name": file_name,  # NOTE: Needed to lookup file id.
                     "qualified_name": None,
@@ -212,7 +202,7 @@ class PythonParser:
         callee = node.child_by_field_name("function")
         name = self._span_text(callee).strip() or self._span_text(node).strip()
 
-        self.symbols["call"].append(
+        self.symbols.append(
             {
                 "file_name": file_name,  # NOTE: Needed to lookup file id.
                 "qualified_name": None,
@@ -234,7 +224,7 @@ class PythonParser:
         line_count = last - first + 1
         signature = self._get_signature(file_lines, first)
         for name in self._import_symbol_names(node):
-            self.symbols["import"].append(
+            self.symbols.append(
                 {
                     "file_name": file_name,  # NOTE: Needed to lookup file id.
                     "qualified_name": None,
