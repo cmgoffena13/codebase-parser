@@ -286,24 +286,23 @@ class PythonParser(ParserBase):
                 key = (import_path, imported_symbol)
                 if key in self.imports_snapshot:
                     self.imports_snapshot[key]["seen"] = True
-                    import_id = self.imports_snapshot[key]["id"]
                 else:
                     import_id = self.assigner.reserve("imports", 1)[0]
                     self.imports_snapshot[key] = {"id": import_id, "seen": True}
 
-                self.imports.append(
-                    {
-                        "id": import_id,
-                        "file_id": file_id,
-                        "import_path": import_path,
-                        "imported_symbol": imported_symbol,
-                        "alias": alias,
-                        "line_number": line_number,
-                        "import_type": import_type,
-                        "import_scope": import_scope,
-                        "signature": signature,
-                    }
-                )
+                    self.imports.append(
+                        {
+                            "id": import_id,
+                            "file_id": file_id,
+                            "import_path": import_path,
+                            "imported_symbol": imported_symbol,
+                            "alias": alias,
+                            "line_number": line_number,
+                            "import_type": import_type,
+                            "import_scope": import_scope,
+                            "signature": signature,
+                        }
+                    )
 
         elif node.type == "import_statement":
             import_type = "absolute"
@@ -327,24 +326,23 @@ class PythonParser(ParserBase):
                 key = (import_path, imported_symbol)
                 if key in self.imports_snapshot:
                     self.imports_snapshot[key]["seen"] = True
-                    import_id = self.imports_snapshot[key]["id"]
                 else:
                     import_id = self.assigner.reserve("imports", 1)[0]
                     self.imports_snapshot[key] = {"id": import_id, "seen": True}
 
-                self.imports.append(
-                    {
-                        "id": import_id,
-                        "file_id": file_id,
-                        "import_path": import_path,
-                        "imported_symbol": imported_symbol,
-                        "alias": alias,
-                        "line_number": line_number,
-                        "import_type": import_type,
-                        "import_scope": import_scope,
-                        "signature": signature,
-                    }
-                )
+                    self.imports.append(
+                        {
+                            "id": import_id,
+                            "file_id": file_id,
+                            "import_path": import_path,
+                            "imported_symbol": imported_symbol,
+                            "alias": alias,
+                            "line_number": line_number,
+                            "import_type": import_type,
+                            "import_scope": import_scope,
+                            "signature": signature,
+                        }
+                    )
 
     def _extract_reference(self, node: Node, ref_kind: str, file_id: int):
         """Extract Reference (Call, Access, Type)."""
