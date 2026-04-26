@@ -33,10 +33,10 @@ class PythonParser:
         tree = self.parser.parse(file_bytes)
         root_node = tree.root_node
         self.symbols_snapshot = self.db.get_symbols_snapshot(file_id)
-        self._walk(root_node, file_id)
+        self._walk(root_node, file_id, file_bytes)
         return self.symbols, self.imports, self.symbol_references_staging
 
-    def _walk(self, node: Node, file_id: int):
+    def _walk(self, node: Node, file_id: int, file_bytes: bytes):
         """Recursive DFS traversal."""
         # 1. Extract Data for CURRENT node
         self._process_node(node, file_id)
@@ -52,7 +52,7 @@ class PythonParser:
             "async_function_definition",
         ):
             # Extract symbol details first
-            sym_data = self._extract_symbol(node, file_id)
+            sym_data = self._extract_symbol(node, file_id, file_bytes)
             if sym_data:
                 symbol_id = sym_data["id"]
                 qualified_name = sym_data["qualified_name"]
@@ -62,7 +62,7 @@ class PythonParser:
 
         # 3. Recurse
         for child in node.children:
-            self._walk(child, file_id)
+            self._walk(child, file_id, file_bytes)
 
         # 4. Pop from stack if we pushed
         if symbol_id is not None:
@@ -87,7 +87,9 @@ class PythonParser:
             if type_node is not None:
                 self._extract_reference(type_node, "type_annotation", file_id)
 
-    def _extract_symbol(self, node: Node, file_id: int) -> Optional[Dict]:
+    def _extract_symbol(
+        self, node: Node, file_id: int, file_bytes: bytes
+    ) -> Optional[Dict]:
         """Extract symbol definition (Class, Function, Variable)."""
         name_node = node.child_by_field_name("name")
         if not name_node:
@@ -134,15 +136,15 @@ class PythonParser:
                     if base.type in ("identifier", "dotted_name"):
                         base_classes.append(base.text.decode("utf-8"))
 
-        # Extract Signature (Full text of definition line)
-        # Tree-sitter gives the whole node text, which includes the body.
-        # We want just the signature line.
-        # Simple heuristic: Find the first newline or end of node.
-        node_text = node.text.decode("utf-8")
-        if "\n" in node_text:
-            signature = node_text.split("\n")[0]
-        else:
-            signature = node_text
+        # Extract Signature (supports multi-line defs)
+        # Slice from the start of the definition up to the start of the body.
+        body_node = node.child_by_field_name("body")
+        end_byte = body_node.start_byte if body_node is not None else node.end_byte
+        signature = (
+            file_bytes[node.start_byte : end_byte]
+            .decode("utf-8", errors="replace")
+            .rstrip()
+        )
 
         # Extract Docstring (First string in body)
         docstring = None
