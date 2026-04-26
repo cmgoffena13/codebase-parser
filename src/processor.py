@@ -122,6 +122,7 @@ class CodeProcessor:
             if file_extension not in FILE_EXTENSION_MAPPING:
                 self.files_skipped += 1
                 return
+
             parser = ParserFactory.get_parser(
                 FILE_EXTENSION_MAPPING[file_extension], self.assigner, self.db
             )

@@ -81,10 +81,10 @@ class PythonParser:
             self._extract_reference(node, "call", file_id)
         elif node.type == "attribute":
             self._extract_reference(node, "access", file_id)
-        elif node.has_child_for_field_name("type"):
+        else:
             # Type hint found (e.g., def foo(x: User))
             type_node = node.child_by_field_name("type")
-            if type_node:
+            if type_node is not None:
                 self._extract_reference(type_node, "type_annotation", file_id)
 
     def _extract_symbol(self, node: Node, file_id: int) -> Optional[Dict]:
@@ -169,9 +169,9 @@ class PythonParser:
             "line_count": line_end - line_start + 1,
             "signature": signature,
             "docstring": docstring,
-            "modifiers": modifiers,
+            "modifiers": str(modifiers) if modifiers else None,
             "language": "python",
-            "base_classes": base_classes,  # Store as list, will be JSON dumped later
+            "base_classes": str(base_classes) if base_classes else None,
         }
 
     def _extract_import(self, node: Node, file_id: int):
