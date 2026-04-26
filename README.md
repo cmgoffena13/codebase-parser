@@ -10,6 +10,7 @@ Utilizes TreeSitter to parse a codebase and store the relationships. This empowe
         - Resolve Import `imported_file_id`
         - Resolve Symbol_References `ref_symbol_id`
         - Build Class Hierarchy
+        - Build File Dependency Hierarchy
 
 - Batch Processing
     - Respecting table relationships while also optimizing for performance through bulk operations

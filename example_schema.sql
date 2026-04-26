@@ -104,6 +104,12 @@ CREATE TABLE IF NOT EXISTS class_hierarchy (
     PRIMARY KEY (parent_id, child_id)
 );
 
+CREATE TABLE IF NOT EXISTS file_dependencies (
+    dependent_id INTEGER NOT NULL REFERENCES files(id),
+    dependency_id INTEGER NOT NULL REFERENCES files(id),
+    PRIMARY KEY (dependent_id, dependency_id)
+);
+
 -- NOTE: FTS for symbols and symbol_references.
 -- Symbols can be maintained in pass 1 incrementally. Symbol References needs to be maintained in pass 2.
 
