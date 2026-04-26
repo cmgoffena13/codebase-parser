@@ -66,6 +66,17 @@ class PythonParser(ParserBase):
                 self.symbols.append(symbol_data)
                 # Push to stack
                 self.stack.append((symbol_id, qualified_name, symbol_data["kind"]))
+        elif node.type in (
+            "assignment",
+            "annotated_assignment",
+            "augmented_assignment",
+        ):
+            # Variable symbols (module/class scope; skip locals for now)
+            if not self.stack or self.stack[-1][2] == "class":
+                for symbol_data in self._extract_variable_symbols(
+                    node, file_id, file_bytes
+                ):
+                    self.symbols.append(symbol_data)
 
         # 3. Recurse
         for child in node.children:
@@ -74,6 +85,91 @@ class PythonParser(ParserBase):
         # 4. Pop from stack if we pushed
         if symbol_id is not None:
             self.stack.pop()
+
+    def _extract_variable_symbols(
+        self, node: Node, file_id: int, file_bytes: bytes
+    ) -> list[Dict]:
+        symbols: list[Dict] = []
+
+        # target is usually in field 'left' for assignment/augmented_assignment
+        target = node.child_by_field_name("left") or node.child_by_field_name("target")
+        if target is None:
+            return symbols
+
+        # Only handle simple identifiers (x = ..., y: int = ...) for now
+        name_node = target if target.type == "identifier" else None
+        if name_node is None:
+            return symbols
+
+        name = name_node.text.decode("utf-8")
+        line_start = node.start_point.row + 1
+        line_end = node.end_point.row + 1
+
+        if self.stack:
+            parent_qn = self.stack[-1][1]
+            qualified_name = f"{parent_qn}.{name}"
+            parent_id = self.stack[-1][0]
+        else:
+            qualified_name = name
+            parent_id = None
+
+        signature = (
+            file_bytes[node.start_byte : node.end_byte]
+            .decode("utf-8", errors="replace")
+            .strip()
+        )
+        signature = " ".join(signature.split())
+
+        kind = "variable"
+        key = (qualified_name, kind)
+        if key in self.symbols_snapshot:
+            self.symbols_snapshot[key]["seen"] = True
+            if (line_start, line_end) != (
+                self.symbols_snapshot[key]["line_start"],
+                self.symbols_snapshot[key]["line_end"],
+            ):
+                symbol_id = self.symbols_snapshot[key]["id"]
+                symbols.append(
+                    {
+                        "id": symbol_id,
+                        "file_id": file_id,
+                        "parent_id": parent_id,
+                        "name": name,
+                        "qualified_name": qualified_name,
+                        "kind": kind,
+                        "line_start": line_start,
+                        "line_end": line_end,
+                        "line_count": line_end - line_start + 1,
+                        "signature": signature,
+                        "docstring": None,
+                        "modifiers": None,
+                        "language": "python",
+                        "base_classes": None,
+                    }
+                )
+        else:
+            symbol_id = self.assigner.reserve("symbols", 1)[0]
+            self.symbols_snapshot[key] = {"id": symbol_id, "seen": True}
+            symbols.append(
+                {
+                    "id": symbol_id,
+                    "file_id": file_id,
+                    "parent_id": parent_id,
+                    "name": name,
+                    "qualified_name": qualified_name,
+                    "kind": kind,
+                    "line_start": line_start,
+                    "line_end": line_end,
+                    "line_count": line_end - line_start + 1,
+                    "signature": signature,
+                    "docstring": None,
+                    "modifiers": None,
+                    "language": "python",
+                    "base_classes": None,
+                }
+            )
+
+        return symbols
 
     def _process_node(self, node: Node, file_id: int) -> None:
         """Handle Imports and References."""
@@ -177,16 +273,16 @@ class PythonParser(ParserBase):
                         docstring = raw.strip("\"'")
                     break
 
-        key = (name, kind)
+        key = (qualified_name, kind)
         if key in self.symbols_snapshot:
-            self.symbols_snapshot[name]["seen"] = True
-            symbol_id = self.symbols_snapshot[name]["id"]
+            self.symbols_snapshot[key]["seen"] = True
 
             # NOTE: if lines changed, we need to update the symbol so return
             if (line_start, line_end) != (
-                self.symbols_snapshot[name]["line_start"],
-                self.symbols_snapshot[name]["line_end"],
+                self.symbols_snapshot[key]["line_start"],
+                self.symbols_snapshot[key]["line_end"],
             ):
+                symbol_id = self.symbols_snapshot[key]["id"]
                 return {
                     "id": symbol_id,
                     "file_id": file_id,
@@ -210,6 +306,8 @@ class PythonParser(ParserBase):
             self.symbols_snapshot[key] = {
                 "id": symbol_id,
                 "seen": True,
+                "line_start": line_start,
+                "line_end": line_end,
             }
             return {
                 "id": symbol_id,

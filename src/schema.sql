@@ -3,7 +3,7 @@ PRAGMA synchronous=NORMAL;
 
 DROP TABLE IF EXISTS watermarks; -- TODO: Remove this after testing.
 CREATE TABLE IF NOT EXISTS watermarks (
-    id                  INTEGER PRIMARY KEY CHECK (id = 1),
+    id                  INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
     last_full_parse     REAL NOT NULL DEFAULT 0.0,  
     last_incremental    REAL DEFAULT 0.0 
 );
@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS files (
 
 DROP TABLE IF EXISTS symbols;
 CREATE TABLE IF NOT EXISTS symbols (
-    id              INTEGER PRIMARY KEY,
+    id              INTEGER NOT NULL PRIMARY KEY,
     file_id         INTEGER NOT NULL REFERENCES files(id),
     parent_id       INTEGER REFERENCES symbols(id), 
     name            TEXT NOT NULL,                  
