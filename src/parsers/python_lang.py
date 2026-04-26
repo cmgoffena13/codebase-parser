@@ -148,6 +148,7 @@ class PythonParser:
             .decode("utf-8", errors="replace")
             .rstrip()
         )
+        signature = " ".join(signature.split())
 
         # Extract Docstring (First string in body)
         docstring = None
