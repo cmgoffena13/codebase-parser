@@ -1,11 +1,13 @@
 from typing import Dict, List, Tuple
 
+from tree_sitter import Parser
+
 from src.assigner import GlobalIDAssigner
 from src.db import CodeDB
 
 
 class ParserBase:
-    def __init__(self, assigner: GlobalIDAssigner, db: CodeDB):
+    def __init__(self, assigner: GlobalIDAssigner, db: CodeDB, parser: Parser):
         self.assigner = assigner
         self.db = db
         self.symbols_snapshot = {}

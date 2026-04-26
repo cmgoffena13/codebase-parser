@@ -1,8 +1,7 @@
 import ast
 from typing import Dict, List, Optional, Tuple
 
-import tree_sitter_python as python_language
-from tree_sitter import Language, Node, Parser
+from tree_sitter import Node, Parser
 
 from src.assigner import GlobalIDAssigner
 from src.db import CodeDB
@@ -14,8 +13,9 @@ class PythonParser(ParserBase):
         self,
         assigner: GlobalIDAssigner,
         db: CodeDB,
+        parser: Parser,
     ):
-        self.parser = Parser(Language(python_language.language()))
+        self.parser = parser
         self.assigner = assigner
         self.db = db
         self.stack: List[Tuple[int, str, str]] = []
