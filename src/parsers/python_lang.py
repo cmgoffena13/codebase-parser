@@ -6,9 +6,10 @@ from tree_sitter import Language, Node, Parser
 
 from src.assigner import GlobalIDAssigner
 from src.db import CodeDB
+from src.parsers.base import ParserBase
 
 
-class PythonParser:
+class PythonParser(ParserBase):
     def __init__(
         self,
         assigner: GlobalIDAssigner,
@@ -53,13 +54,13 @@ class PythonParser:
             "async_function_definition",
         ):
             # Extract symbol details first
-            sym_data = self._extract_symbol(node, file_id, file_bytes)
-            if sym_data:
-                symbol_id = sym_data["id"]
-                qualified_name = sym_data["qualified_name"]
-                self.symbols.append(sym_data)
+            symbol_data = self._extract_symbol(node, file_id, file_bytes)
+            if symbol_data:
+                symbol_id = symbol_data["id"]
+                qualified_name = symbol_data["qualified_name"]
+                self.symbols.append(symbol_data)
                 # Push to stack
-                self.stack.append((symbol_id, qualified_name, sym_data["kind"]))
+                self.stack.append((symbol_id, qualified_name, symbol_data["kind"]))
 
         # 3. Recurse
         for child in node.children:
@@ -77,13 +78,11 @@ class PythonParser:
             return  # Imports don't have children that are symbols
 
         # --- REFERENCES ---
-        # Check for Calls, Attributes, and Type Hints
         if node.type == "call":
             self._extract_reference(node, "call", file_id)
         elif node.type == "attribute":
             self._extract_reference(node, "access", file_id)
         else:
-            # Type hint found (e.g., def foo(x: User))
             type_node = node.child_by_field_name("type")
             if type_node is not None:
                 self._extract_reference(type_node, "type_annotation", file_id)
@@ -100,7 +99,6 @@ class PythonParser:
         line_start = node.start_point.row + 1
         line_end = node.end_point.row + 1
 
-        # Determine Kind
         if node.type == "class_definition":
             kind = "class"
         elif node.type in ("function_definition", "async_function_definition"):
@@ -112,7 +110,6 @@ class PythonParser:
         else:
             kind = "variable"  # Fallback for assignments
 
-        # Build Qualified Name
         if self.stack:
             parent_qn = self.stack[-1][1]
             qualified_name = f"{parent_qn}.{name}"
@@ -139,7 +136,7 @@ class PythonParser:
                     if base.type in ("identifier", "dotted_name"):
                         base_classes.append(base.text.decode("utf-8"))
 
-        # Extract Signature (supports multi-line defs)
+        # Extract Signature
         # Slice from the start of the definition up to the start of the body.
         body_node = node.child_by_field_name("body")
         end_byte = body_node.start_byte if body_node is not None else node.end_byte
@@ -165,19 +162,16 @@ class PythonParser:
                         if candidate.type == "string":
                             str_node = candidate
                 elif stmt.type == "string":
-                    # fallback
                     str_node = stmt
 
                 if str_node is not None:
                     raw = str_node.text.decode("utf-8", errors="replace")
                     try:
-                        # Handles single/double/triple quotes and escapes
                         docstring = ast.literal_eval(raw)
                     except Exception:
                         docstring = raw.strip("\"'")
                     break
 
-        # Reserve ID
         sym_id = self.assigner.reserve("symbols", 1)[0]
 
         return {
@@ -202,7 +196,7 @@ class PythonParser:
         import_path = ""
         imported_symbol = ""
         alias = None
-        import_type = "absolute"  # Default
+        import_type = "absolute"
 
         # Determine Type (Relative vs Absolute)
         if node.type == "import_from_statement":
@@ -212,7 +206,6 @@ class PythonParser:
                 if level > 0:
                     import_type = "relative"
 
-            # Get module path
             module_node = node.child_by_field_name("module")
             if module_node:
                 import_path = module_node.text.decode("utf-8")
@@ -228,7 +221,6 @@ class PythonParser:
                         if alias_node:
                             alias = alias_node.text.decode("utf-8")
 
-                        # Add to list
                         self.imports.append(
                             {
                                 "file_id": file_id,
@@ -263,7 +255,7 @@ class PythonParser:
                             {
                                 "file_id": file_id,
                                 "import_path": import_path,
-                                "imported_symbol": "",  # No specific symbol imported
+                                "imported_symbol": "",
                                 "alias": alias,
                                 "line_number": node.start_point.row + 1,
                                 "import_type": import_type,
@@ -276,7 +268,7 @@ class PythonParser:
 
     def _extract_reference(self, node: Node, ref_kind: str, file_id: int):
         """Extract Reference (Call, Access, Type)."""
-        # Determine Target Name
+
         target_name = ""
 
         if ref_kind == "call":
