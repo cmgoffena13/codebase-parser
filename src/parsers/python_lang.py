@@ -1,247 +1,292 @@
-import re
-from typing import Optional
+from typing import Dict, List, Optional, Tuple
 
+import tree_sitter_python as python_language
 from tree_sitter import Language, Node, Parser
-from tree_sitter_python import language as python_language
+
+from src.assigner import GlobalIDAssigner
+from src.db import CodeDB
 
 
 class PythonParser:
-    def __init__(self):
+    def __init__(
+        self,
+        assigner: GlobalIDAssigner,
+        db: CodeDB,
+    ):
         self.parser = Parser(Language(python_language()))
-        self.docstring_re = re.compile(r'"""(.*?)"""', re.DOTALL)
-        self.function_types = {"function_definition"}
-        self.class_types = {"class_definition"}
-        self.call_types = {"call"}
-        self.import_types = {"import_from_statement", "import_statement"}
-        self.symbols = []
+        self.assigner = assigner
+        self.db = db
+        self.symbols_snapshot = self.db.get_symbols_snapshot()
+        self.stack: List[Tuple[int, str, str]] = []
+        self.symbols: List[Dict] = []
+        self.imports: List[Dict] = []
+        self.references: List[Dict] = []
 
-    def _span_text(self, node: Node | None) -> str:
-        """Text of this node exactly as it appears in the source (any node type)."""
-        raw = node.text
-        if isinstance(raw, str):
-            return raw
-        if isinstance(raw, memoryview):
-            raw = raw.tobytes()
-        if isinstance(raw, (bytes, bytearray)):
-            return raw.decode("utf-8", errors="replace")
-        return str(raw)
+    def parse(
+        self, file_id: int, file_bytes: bytes
+    ) -> Tuple[List[Dict], List[Dict], List[Dict]]:
+        tree = self.parser.parse(file_bytes)
+        root_node = tree.root_node
+        self._walk(root_node, file_id)
+        return self.symbols, self.imports, self.references
 
-    def _import_symbol_names(self, node: Node) -> list[str]:
-        """Imported symbols only (not ``from`` / ``import`` keywords); one string per binding."""
-        names: list[str] = []
+    def _walk(self, node: Node, file_id: int):
+        """Recursive DFS traversal."""
+        # 1. Extract Data for CURRENT node
+        self._process_node(node, file_id)
 
-        if node.type == "import_from_statement":
-            module = node.child_by_field_name("module_name")
-            for child in node.children:
-                if child.type not in ("dotted_name", "aliased_import", "identifier"):
-                    continue
-                if child is module:
-                    continue
-                text = self._span_text(child).strip()
-                if text:
-                    names.append(text)
-            if not names:
-                for child in node.children:
-                    if child.type == "wildcard_import":
-                        module_text = self._span_text(module).strip()
-                        names.append(f"{module_text}.*" if module_text else "*")
-                        break
+        # 2. Push to stack if it's a container (Class/Function)
+        # We need to know the ID *before* recursing so children can use it as parent
+        symbol_id = None
+        qualified_name = None
 
-        if node.type == "import_statement":
-            for child in node.children:
-                if child.type in ("dotted_name", "aliased_import"):
-                    text = self._span_text(child).strip()
-                    if text:
-                        names.append(text)
+        if node.type in (
+            "class_definition",
+            "function_definition",
+            "async_function_definition",
+        ):
+            # Extract symbol details first
+            sym_data = self._extract_symbol(node, file_id)
+            if sym_data:
+                symbol_id = sym_data["id"]
+                qualified_name = sym_data["qualified_name"]
+                self.symbols.append(sym_data)
+                # Push to stack
+                self.stack.append((symbol_id, qualified_name, sym_data["kind"]))
 
-        return names
-
-    def _definition_name(self, node: Node) -> str:
-        """Return the written name for a ``class_definition`` or ``function_definition``.
-
-        For ``class Foo`` or ``def bar``, tree-sitter does not keep ``"Foo"`` on the
-        class/function node itself. It stores a child node (field ``"name"``, node type
-        ``identifier``) that points at the name in the source. We read that child's
-        ``.text`` (often raw bytes from the parse buffer) and return a normal ``str``.
-        """
-        return self._span_text(node.child_by_field_name("name"))
-
-    def _get_signature(self, file_lines: list[str], start_line: int) -> str:
-        """First line of text for a symbol; ``start_line`` is 1-based (same as ``line_start``)."""
-        if not file_lines:
-            return ""
-        idx = start_line - 1
-        if idx < 0 or idx >= len(file_lines):
-            return ""
-        return file_lines[idx].rstrip()
-
-    def _get_docstring(
-        self, file_lines: list[str], start: int, end: int
-    ) -> Optional[str]:
-
-        start_idx = max(0, start - 1)
-        end_idx = min(len(file_lines), end)
-
-        text = "\n".join(file_lines[start_idx:end_idx])
-        m = self.docstring_re.search(text)
-        return m.group(1) if m else None
-
-    def _owning_class_definition(self, node: Node) -> Optional[Node]:
-        """Return the ``class_definition`` for the class that contains this function, if any.
-
-        Returns None at module scope, inside another function, and similar cases where
-        walking up does not reach ``class_definition`` -> ``block`` -> this function.
-
-        If the function has decorators, tree-sitter wraps it in a ``decorated_definition``
-        parent; the loop climbs past that wrapper node only (not past the function itself).
-        ``@classmethod``, ``@staticmethod``, and other decorators still end up classified
-        as class methods when the function sits in a class body.
-        """
-        ancestor = node.parent
-        while ancestor is not None and ancestor.type == "decorated_definition":
-            ancestor = ancestor.parent
-
-        if ancestor is None or ancestor.type != "block":
-            return None
-
-        class_node = ancestor.parent
-        if class_node is None or class_node.type not in self.class_types:
-            return None
-
-        return class_node
-
-    def _walk(self, node: Node, file_name: str, file_lines: list[str]) -> None:
+        # 3. Recurse
         for child in node.children:
-            if child.type in self.class_types:
-                self._parse_class(child, file_name, file_lines)
-            elif child.type in self.function_types:
-                self._parse_function_or_method(child, file_name, file_lines)
-            elif child.type in self.call_types:
-                self._parse_call(child, file_name, file_lines)
-            elif child.type in self.import_types:
-                self._parse_import(child, file_name, file_lines)
-            self._walk(child, file_name, file_lines)
+            self._walk(child)
 
-    def _parse_function_or_method(
-        self, node: Node, file_name: str, file_lines: list[str]
-    ) -> None:
-        cls = self._owning_class_definition(node)
-        if cls is not None:
-            class_name = self._definition_name(cls)
-            method_name = self._definition_name(node)
-            first = node.start_point.row + 1
-            last = node.end_point.row + 1
-            line_count = last - first + 1
-            signature = self._get_signature(file_lines, first)
-            docstring = self._get_docstring(file_lines, first, last)
-            self.symbols.append(
-                {
-                    "file_name": file_name,  # NOTE: Needed to lookup file id.
-                    "name": method_name,
-                    "qualified_name": f"{class_name}.{method_name}",
-                    "kind": "method",
-                    "line_start": first,
-                    "line_end": last,
-                    "line_count": line_count,
-                    "signature": signature,
-                    "language": "python",
-                    "docstring": docstring,
-                }
-            )
+        # 4. Pop from stack if we pushed
+        if symbol_id is not None:
+            self.stack.pop()
+
+    def _process_node(self, node: Node, file_id: int):
+        """Handle Imports and References."""
+        # --- IMPORTS ---
+        if node.type in ("import_statement", "import_from_statement"):
+            self._extract_import(node, file_id)
+            return  # Imports don't have children that are symbols
+
+        # --- REFERENCES ---
+        # Check for Calls, Attributes, and Type Hints
+        if node.type == "call":
+            self._extract_reference(node, "call", file_id)
+        elif node.type == "attribute":
+            self._extract_reference(node, "access", file_id)
+        elif node.has_child_for_field_name("type"):
+            # Type hint found (e.g., def foo(x: User))
+            type_node = node.child_by_field_name("type")
+            if type_node:
+                self._extract_reference(type_node, "type_annotation", file_id)
+
+    def _extract_symbol(self, node: Node, file_id: int) -> Optional[Dict]:
+        """Extract symbol definition (Class, Function, Variable)."""
+        name_node = node.child_by_field_name("name")
+        if not name_node:
+            return None
+
+        name = name_node.text.decode("utf-8")
+        line_start = node.start_point.row + 1
+        line_end = node.end_point.row + 1
+
+        # Determine Kind
+        if node.type == "class_definition":
+            kind = "class"
+        elif node.type in ("function_definition", "async_function_definition"):
+            # Check if inside a class
+            if self.stack and self.stack[-1][2] == "class":
+                kind = "method"
+            else:
+                kind = "function"
         else:
-            name = self._definition_name(node)
-            first = node.start_point.row + 1
-            last = node.end_point.row + 1
-            line_count = last - first + 1
-            signature = self._get_signature(file_lines, first)
-            docstring = self._get_docstring(file_lines, first, last)
-            self.symbols.append(
-                {
-                    "file_name": file_name,  # NOTE: Needed to lookup file id.
-                    "qualified_name": None,
-                    "name": name,
-                    "line_start": first,
-                    "line_end": last,
-                    "line_count": line_count,
-                    "kind": "function",
-                    "language": "python",
-                    "signature": signature,
-                    "docstring": docstring,
-                }
-            )
+            kind = "variable"  # Fallback for assignments
 
-    def _parse_class(self, node: Node, file_name: str, file_lines: list[str]) -> None:
-        if node.type in self.class_types:
-            class_name = self._definition_name(node)
-            first = node.start_point.row + 1
-            last = node.end_point.row + 1
-            line_count = last - first + 1
-            signature = self._get_signature(file_lines, first)
-            self.symbols.append(
-                {
-                    "file_name": file_name,  # NOTE: Needed to lookup file id.
-                    "qualified_name": None,
-                    "name": class_name,
-                    "kind": "class",
-                    "line_start": first,
-                    "line_end": last,
-                    "line_count": line_count,
-                    "language": "python",
-                    "signature": signature,
-                    "docstring": None,
-                }
-            )
+        # Build Qualified Name
+        if self.stack:
+            parent_qn = self.stack[-1][1]
+            qualified_name = f"{parent_qn}.{name}"
+        else:
+            qualified_name = name
 
-    def _parse_call(self, node: Node, file_name: str, file_lines: list[str]) -> None:
-        """Record a function call: ``name`` is the callee expression (e.g. ``foo``, ``self.bar``)."""
-        first = node.start_point.row + 1
-        last = node.end_point.row + 1
-        line_count = last - first + 1
-        signature = self._get_signature(file_lines, first)
+        # Extract Modifiers (Decorators)
+        modifiers = []
+        if node.parent and node.parent.type == "decorated_definition":
+            for child in node.parent.children:
+                if child.type == "decorator":
+                    dec_name = child.child_by_field_name("name")
+                    if dec_name:
+                        modifiers.append(dec_name.text.decode("utf-8"))
 
-        callee = node.child_by_field_name("function")
-        name = self._span_text(callee).strip() or self._span_text(node).strip()
+        # Extract Base Classes (for classes only)
+        base_classes = []
+        if kind == "class":
+            superclasses = node.child_by_field_name("superclasses")
+            if superclasses:
+                for base in superclasses.children:
+                    if base.type in ("identifier", "dotted_name"):
+                        base_classes.append(base.text.decode("utf-8"))
 
-        self.symbols.append(
+        # Extract Signature (Full text of definition line)
+        # Tree-sitter gives the whole node text, which includes the body.
+        # We want just the signature line.
+        # Simple heuristic: Find the first newline or end of node.
+        node_text = node.text.decode("utf-8")
+        if "\n" in node_text:
+            signature = node_text.split("\n")[0]
+        else:
+            signature = node_text
+
+        # Extract Docstring (First string in body)
+        docstring = None
+        body = node.child_by_field_name("body")
+        if body:
+            for child in body.children:
+                if child.type == "string":
+                    # Remove quotes
+                    docstring = child.text.decode("utf-8").strip("\"'")
+                    break
+
+        # Reserve ID
+        sym_id = self.assigner.reserve("symbols", 1)[0]
+
+        return {
+            "id": sym_id,
+            "file_id": file_id,
+            "parent_id": self.stack[-1][0] if self.stack else None,
+            "name": name,
+            "qualified_name": qualified_name,
+            "kind": kind,
+            "line_start": line_start,
+            "line_end": line_end,
+            "line_count": line_end - line_start + 1,
+            "signature": signature,
+            "docstring": docstring,
+            "modifiers": modifiers,
+            "language": "python",
+            "base_classes": base_classes,  # Store as list, will be JSON dumped later
+        }
+
+    def _extract_import(self, node: Node, file_id: int):
+        """Extract Import Statement."""
+        import_path = ""
+        imported_symbol = ""
+        alias = None
+        import_type = "absolute"  # Default
+
+        # Determine Type (Relative vs Absolute)
+        if node.type == "import_from_statement":
+            level_node = node.child_by_field_name("level")
+            if level_node:
+                level = int(level_node.text.decode())
+                if level > 0:
+                    import_type = "relative"
+
+            # Get module path
+            module_node = node.child_by_field_name("module")
+            if module_node:
+                import_path = module_node.text.decode("utf-8")
+
+            # Get imported names
+            # import_from_statement can have multiple names: from x import a, b
+            for child in node.children:
+                if child.type == "aliased_import":
+                    name_node = child.child_by_field_name("name")
+                    alias_node = child.child_by_field_name("alias")
+                    if name_node:
+                        imported_symbol = name_node.text.decode("utf-8")
+                        if alias_node:
+                            alias = alias_node.text.decode("utf-8")
+
+                        # Add to list
+                        self.imports.append(
+                            {
+                                "file_id": file_id,
+                                "import_path": import_path,
+                                "imported_symbol": imported_symbol,
+                                "alias": alias,
+                                "line_number": node.start_point.row + 1,
+                                "import_type": import_type,
+                                "import_scope": "module"
+                                if not self.stack
+                                else "function",
+                                "signature": node.text.decode("utf-8"),
+                            }
+                        )
+                elif child.type == "dotted_name" and not import_path:
+                    # Fallback for simple "from x import y"
+                    pass
+
+        elif node.type == "import_statement":
+            # import x, y
+            import_type = "absolute"
+            for child in node.children:
+                if child.type == "aliased_import":
+                    name_node = child.child_by_field_name("name")
+                    alias_node = child.child_by_field_name("alias")
+                    if name_node:
+                        import_path = name_node.text.decode("utf-8")
+                        if alias_node:
+                            alias = alias_node.text.decode("utf-8")
+
+                        self.imports.append(
+                            {
+                                "file_id": file_id,
+                                "import_path": import_path,
+                                "imported_symbol": "",  # No specific symbol imported
+                                "alias": alias,
+                                "line_number": node.start_point.row + 1,
+                                "import_type": import_type,
+                                "import_scope": "module"
+                                if not self.stack
+                                else "function",
+                                "signature": node.text.decode("utf-8"),
+                            }
+                        )
+
+    def _extract_reference(self, node: Node, ref_kind: str, file_id: int):
+        """Extract Reference (Call, Access, Type)."""
+        # Determine Target Name
+        target_name = ""
+
+        if ref_kind == "call":
+            # func() -> target is 'func'
+            func_node = node.child_by_field_name("function")
+            if func_node:
+                target_name = func_node.text.decode("utf-8")
+        elif ref_kind == "access":
+            # obj.attr -> target is 'attr'
+            attr_node = node.child_by_field_name("attribute")
+            if attr_node:
+                target_name = attr_node.text.decode("utf-8")
+        elif ref_kind == "type_annotation":
+            # x: Type -> target is 'Type'
+            target_name = node.text.decode("utf-8")
+
+        if not target_name:
+            return
+
+        # Build Qualified Name for Context
+        # If it's "self.method", we know it's inside a class
+        qualified_name = target_name
+        if target_name.startswith("self.") or target_name.startswith("cls."):
+            if self.stack:
+                parent_qn = self.stack[-1][1]
+                # Replace self/cls with parent name
+                suffix = target_name.split(".", 1)[1]
+                qualified_name = f"{parent_qn}.{suffix}"
+
+        # If it's a simple name, we can't resolve it yet, so keep raw
+        # But if it's "module.func", we keep "module.func"
+
+        self.refs_staging.append(
             {
-                "file_name": file_name,  # NOTE: Needed to lookup file id.
-                "qualified_name": None,
-                "name": name,
-                "kind": "call",
-                "line_start": first,
-                "line_end": last,
-                "line_count": line_count,
-                "language": "python",
-                "signature": signature,
-                "docstring": None,
+                "ref_symbol_name": target_name,
+                "ref_symbol_qualified_name": qualified_name,
+                "source_file_id": file_id,
+                "source_line": node.start_point.row + 1,
+                "ref_kind": ref_kind,
+                "context": node.text.decode("utf-8"),
             }
         )
-
-    def _parse_import(self, node: Node, file_name: str, file_lines: list[str]) -> None:
-        """One row per imported binding; ``signature`` is the full import line text."""
-        first = node.start_point.row + 1
-        last = node.end_point.row + 1
-        line_count = last - first + 1
-        signature = self._get_signature(file_lines, first)
-        for name in self._import_symbol_names(node):
-            self.symbols.append(
-                {
-                    "file_name": file_name,  # NOTE: Needed to lookup file id.
-                    "qualified_name": None,
-                    "name": name,
-                    "kind": "import",
-                    "line_start": first,
-                    "line_end": last,
-                    "line_count": line_count,
-                    "language": "python",
-                    "signature": signature,
-                    "docstring": None,
-                }
-            )
-
-    def parse(self, content: bytes, file_name: str) -> dict[str, list[dict]]:
-        tree = self.parser.parse(content)
-        root_node = tree.root_node
-        file_lines = content.decode("utf-8", errors="replace").splitlines()
-        self._walk(root_node, file_name, file_lines)
-        return self.symbols

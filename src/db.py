@@ -46,9 +46,9 @@ class CodeDB:
             params = (last_incremental,)
         self.exec_tran(query, params)
 
-    def get_directories_snapshot(self) -> dict[Path, dict]:
+    def get_directories_snapshot(self) -> dict[str, dict]:
         cursor = self.connection.execute("SELECT id, path FROM directories")
-        return {Path(row["path"]): {"id": row["id"], "seen": False} for row in cursor}
+        return {row["path"]: {"id": row["id"], "seen": False} for row in cursor}
 
     def delete_directories(self, directories: dict[str, dict]) -> None:
         dir_ids = [dir["id"] for dir in directories.values() if not dir["seen"]]
@@ -60,12 +60,12 @@ class CodeDB:
         """
         self.exec_tran(query, (dir_ids, dir_ids))
 
-    def get_files_snapshot(self) -> dict[Path, dict]:
+    def get_files_snapshot(self) -> dict[str, dict]:
         cursor = self.connection.execute(
             "SELECT id, path, content_hash, line_count FROM files"
         )
         return {
-            Path(row["path"]): {
+            row["path"]: {
                 "id": row["id"],
                 "seen": False,
                 "content_hash": row["content_hash"],
@@ -82,6 +82,29 @@ class CodeDB:
         DELETE FROM files WHERE id IN (?)
         """
         self.exec_tran(query, (file_ids, file_ids))
+
+    def get_symbols_snapshot(self) -> dict[int, dict]:
+        cursor = self.connection.execute(
+            """
+            SELECT 
+            id, 
+            COALESCE(qualified_name, name) AS name,
+            kind,
+            line_start,
+            line_end
+            FROM symbols 
+            WHERE file_id = ?
+            """
+        )
+        return {
+            tuple(row["name"], row["kind"]): {
+                "id": row["id"],
+                "line_start": row["line_start"],
+                "line_end": row["line_end"],
+                "seen": False,
+            }
+            for row in cursor
+        }
 
     def close(self):
         if not self.connection_closed:

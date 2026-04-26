@@ -33,20 +33,6 @@ class CodeProcessor:
 
         self.directories_snapshot = self.db.get_directories_snapshot()
         self.files_snapshot = self.db.get_files_snapshot()
-        if Path(".") not in self.directories_snapshot:
-            root_id = self.assigner.reserve("directories", 1)[0]
-            self.db_batches["directories"].append(
-                {
-                    "id": root_id,
-                    "parent_id": None,
-                    "name": ".",
-                    "path": ".",
-                    "depth": 0,
-                    "file_count": 0,
-                    "total_lines": 0,
-                }
-            )
-            self.directories_snapshot[Path(".")] = {"id": root_id, "seen": True}
 
     def _process_directories(
         self, directory_names: list[str], directory_path: Path
@@ -81,67 +67,75 @@ class CodeProcessor:
             }
         self.db.delete_directories(self.directories_snapshot)
 
+    def _process_file(self, file_name: str, directory_path: Path, full: bool) -> None:
+        file_path = directory_path / file_name
+        file_relative_path = file_path.relative_to(self.root)
+        file_last_modified = file_path.lstat().st_mtime
+        file_extension = file_relative_path.suffix
+        dir_path = file_path.parent.relative_to(self.root)
+        if str(dir_path) == ".":
+            directory_id = None
+        else:
+            directory_id = self.directories_snapshot[dir_path]["id"]
+
+        if file_relative_path in self.files_snapshot:
+            self.files_snapshot[file_relative_path]["seen"] = True
+            file_id = self.files_snapshot[file_relative_path]["id"]
+        else:
+            file_id = self.assigner.reserve("files", 1)[0]
+
+        try:
+            file_bytes = file_path.read_bytes()
+            file_hash = xxhash.xxh128(file_bytes).hexdigest()
+            line_count = file_bytes.count(b"\n") + 1 if file_bytes else 0
+        except OSError:
+            self.files_skipped += 1
+            return
+
+        self.db_batches["files"].append(
+            {
+                "id": file_id,
+                "directory_id": directory_id,
+                "name": file_name,
+                "path": str(file_relative_path),
+                "language": FILE_EXTENSION_MAPPING.get(file_extension, None),
+                "content_hash": file_hash,
+                "line_count": line_count,
+            }
+        )
+        self.files_snapshot[file_relative_path] = {
+            "id": file_id,
+            "seen": True,
+            "content_hash": file_hash,
+            "line_count": line_count,
+        }
+
+        # NOTE: Two Gateway Checks for parsing: 1. Time 2. Content Hash.
+        if full or (
+            file_last_modified > self.last_incremental
+            and file_hash != self.files_snapshot[file_relative_path]["content_hash"]
+        ):
+            if file_extension not in FILE_EXTENSION_MAPPING:
+                self.files_skipped += 1
+                return
+            parser = ParserFactory.get_parser(
+                FILE_EXTENSION_MAPPING[file_extension], self.assigner
+            )
+            symbols, references, imports = parser.parse(file_id, file_bytes)
+            self.db_batches["symbols"].extend(symbols)
+            self.db_batches["references"].extend(references)
+            self.db_batches["imports"].extend(imports)
+            self.files_indexed += 1
+        else:
+            return
+
     def _process_files(
         self, file_names: list[str], directory_path: Path, full: bool
     ) -> None:
         for file_name in file_names:
-            file_path = directory_path / file_name
-            file_relative_path = file_path.relative_to(self.root)
-            file_last_modified = file_path.lstat().st_mtime
-            file_extension = file_relative_path.suffix
-            dir_path = file_relative_path.parent
-            directory_id = self.directories_snapshot[dir_path]["id"]
-
-            if file_relative_path in self.files_snapshot:
-                self.files_snapshot[file_relative_path]["seen"] = True
-                file_id = self.files_snapshot[file_relative_path]["id"]
-            else:
-                file_id = self.assigner.reserve("files", 1)[0]
-
-            try:
-                file_bytes = file_path.read_bytes()
-                file_hash = xxhash.xxh128(file_bytes).hexdigest()
-                line_count = file_bytes.count(b"\n") + 1 if file_bytes else 0
-            except OSError:
-                self.files_skipped += 1
-                continue
-
-            self.db_batches["files"].append(
-                {
-                    "id": file_id,
-                    "directory_id": directory_id,
-                    "name": file_name,
-                    "path": str(file_relative_path),
-                    "language": FILE_EXTENSION_MAPPING.get(file_extension, None),
-                    "content_hash": file_hash,
-                    "line_count": line_count,
-                }
-            )
-            self.files_snapshot[file_relative_path] = {
-                "id": file_id,
-                "seen": True,
-                "content_hash": file_hash,
-                "line_count": line_count,
-            }
-
-            # NOTE: Two Gateway Checks for parsing: 1. Time 2. Content Hash.
-            if full or (
-                file_last_modified > self.last_incremental
-                and file_hash != self.files_snapshot[file_relative_path]["content_hash"]
-            ):
-                if file_extension not in FILE_EXTENSION_MAPPING:
-                    self.files_skipped += 1
-                    continue
-                parser = ParserFactory.get_parser(
-                    FILE_EXTENSION_MAPPING[file_extension]
-                )
-                parser.parse(file_bytes, file_name)
-                self.files_indexed += 1
-            else:
-                continue
+            self._process_file(file_name, directory_path, full)
 
         self.db.delete_files(self.files_snapshot)
-        # snapshots persist across walk; no cleanup needed
 
     def process(self, full: bool = False) -> None:
         start_time = time.time()

@@ -103,7 +103,7 @@ How do we maintain a repo structure of the codebase?
         - line_count - used for delta calculations to adjust directory total_lines
 
 How do we maintain the symbols, imports, and references of a file?
-- Before we parse a file, query for the last snapshot of the file using file path.
+- Before we parse a file, query for the last snapshot of the symbols using file path.
     - Snapshot Fields Needed:
         - id - to reuse
         - qualified_name - lookup key, its always COALECES(qualified_name, name)
