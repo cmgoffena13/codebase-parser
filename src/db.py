@@ -2,6 +2,14 @@ import sqlite3
 from pathlib import Path
 from typing import Optional
 
+TABLE_BATCH_MAP = {
+    "directories",
+    "files",
+    "symbols",
+    "imports",
+    "symbol_references",
+}
+
 
 class CodeDB:
     def __init__(self, root: Path):
@@ -156,6 +164,9 @@ class CodeDB:
             }
             for row in cursor
         }
+
+    def bulk_insert(self, db_batches: dict[list[dict]]) -> None:
+        pass
 
     def close(self):
         if not self.connection_closed:

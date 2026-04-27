@@ -6,17 +6,9 @@ from pathlib import Path
 import xxhash
 
 from src.assigner import GlobalIDAssigner
-from src.db import CodeDB
+from src.db import TABLE_BATCH_MAP, CodeDB
 from src.git_utils import GIT_IGNORE_LIST  # NOTE: placeholder for now
 from src.parsers.factory import FILE_EXTENSION_MAPPING, ParserFactory
-
-TABLE_BATCH_MAP = {
-    "directories",
-    "files",
-    "symbols",
-    "imports",
-    "symbol_references",
-}
 
 
 class CodeProcessor:
@@ -131,6 +123,7 @@ class CodeProcessor:
             self.db_batches["imports"].extend(imports)
             self.db_batches["symbol_references"].extend(references)
             self.files_indexed += 1
+            self._insert_batch()
         else:
             return
 
@@ -141,6 +134,21 @@ class CodeProcessor:
             self._process_file(file_name, directory_path, full)
 
         self.db.delete_files(self.files_snapshot)
+
+    def _insert_batch(self, final: bool = False) -> None:
+        if not final:
+            if not any(
+                len(batch) >= self.db_batch_size for batch in self.db_batches.values()
+            ):
+                return
+
+        self.db.bulk_insert(self.db_batches)
+        self.db_batches = dict()
+        for table in TABLE_BATCH_MAP:
+            self.db_batches[table] = []
+
+    def _bulk_operations(self) -> None:
+        pass
 
     def process(self, full: bool = False) -> None:
         start_time = time.time()
@@ -154,6 +162,9 @@ class CodeProcessor:
             self._process_directories(directory_names, directory_path)
             self._process_files(file_names, directory_path, full)
 
+        self._insert_batch(final=True)
+        self._bulk_operations()
+
         time_now = time.time()
         if full:
             self.last_full_parse = time_now
@@ -162,7 +173,7 @@ class CodeProcessor:
             self.last_full_parse = None
             self.last_incremental = time_now
 
-        print(json.dumps(self.db_batches.get("symbols", []), indent=4))
+        print(json.dumps(self.db_batches.get("symbol_references", []), indent=4))
         self.db.set_watermark(self.last_full_parse, self.last_incremental)
 
         duration = time_now - start_time
