@@ -12,6 +12,19 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "prek>=0.3.10",
     "pytest>=9.0.3",
     "pytest-xdist>=3.8.0",
+    "ruff>=0.15.12",
+    "ty>=0.0.32",
 ]
+
+[tool.pytest.ini_options]
+testpaths = [ "src/tests" ]
+pythonpath = [ "." ]
+
+[tool.ruff]
+lint.select = ["I"]
+
+[tool.ty.src]
+exclude = ["./tests/files_to_parse/"]

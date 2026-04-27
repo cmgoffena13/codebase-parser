@@ -1,6 +1,6 @@
 import sqlite3
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 TABLE_BATCH_MAP = {
     "directories",
@@ -54,11 +54,11 @@ class CodeDB:
             params = (last_incremental,)
         self.exec_tran(query, params)
 
-    def get_directories_snapshot(self) -> dict[str, dict]:
+    def get_directories_snapshot(self) -> dict[Path, dict[str, Any]]:
         cursor = self.connection.execute("SELECT id, path FROM directories")
-        return {row["path"]: {"id": row["id"], "seen": False} for row in cursor}
+        return {Path(row["path"]): {"id": row["id"], "seen": False} for row in cursor}
 
-    def delete_directories(self, directories: dict[str, dict]) -> None:
+    def delete_directories(self, directories: dict[Path, dict[str, Any]]) -> None:
         dir_ids = [dir["id"] for dir in directories.values() if not dir["seen"]]
         if not dir_ids:
             return
@@ -68,12 +68,12 @@ class CodeDB:
         """
         self.exec_tran(query, (dir_ids, dir_ids))
 
-    def get_files_snapshot(self) -> dict[str, dict]:
+    def get_files_snapshot(self) -> dict[Path, dict[str, Any]]:
         cursor = self.connection.execute(
             "SELECT id, path, content_hash, line_count FROM files"
         )
         return {
-            row["path"]: {
+            Path(row["path"]): {
                 "id": row["id"],
                 "seen": False,
                 "content_hash": row["content_hash"],
@@ -82,7 +82,7 @@ class CodeDB:
             for row in cursor
         }
 
-    def delete_files(self, files: dict[Path, dict]) -> None:
+    def delete_files(self, files: dict[Path, dict[str, Any]]) -> None:
         file_ids = [file["id"] for file in files.values() if not file["seen"]]
         if not file_ids:
             return
@@ -91,7 +91,9 @@ class CodeDB:
         """
         self.exec_tran(query, (file_ids, file_ids))
 
-    def get_symbols_snapshot(self, file_id: int) -> dict[int, dict]:
+    def get_symbols_snapshot(
+        self, file_id: int
+    ) -> dict[tuple[str, str], dict[str, Any]]:
         query = """
             SELECT 
             id, 
@@ -104,7 +106,7 @@ class CodeDB:
             """
         cursor = self.connection.execute(query, (file_id,))
         return {
-            tuple(row["name"], row["kind"]): {
+            (row["name"], row["kind"]): {
                 "id": row["id"],
                 "line_start": row["line_start"],
                 "line_end": row["line_end"],
@@ -113,7 +115,7 @@ class CodeDB:
             for row in cursor
         }
 
-    def delete_symbols(self, symbols: dict[tuple[str, str], dict]) -> None:
+    def delete_symbols(self, symbols: dict[tuple[str, str], dict[str, Any]]) -> None:
         symbol_ids = [symbol["id"] for symbol in symbols.values() if not symbol["seen"]]
         if not symbol_ids:
             return
@@ -123,8 +125,8 @@ class CodeDB:
         self.exec_tran(query, (symbol_ids,))
 
     def get_symbol_references_snapshot(
-        self, symbol_id: int
-    ) -> dict[tuple[str, str], dict]:
+        self, file_id: int
+    ) -> dict[tuple[str, str], dict[str, Any]]:
         query = """
         SELECT
         id,
@@ -138,7 +140,7 @@ class CodeDB:
         FROM symbol_references
         WHERE source_file_id = ?
         """
-        cursor = self.connection.execute(query, (symbol_id,))
+        cursor = self.connection.execute(query, (file_id,))
         return {
             (row["name"], row["ref_kind"]): {
                 "id": row["id"],
@@ -147,7 +149,9 @@ class CodeDB:
             for row in cursor
         }
 
-    def get_imports_snapshot(self, file_id: int) -> dict[tuple[str, str], dict]:
+    def get_imports_snapshot(
+        self, file_id: int
+    ) -> dict[tuple[str, str], dict[str, Any]]:
         query = """
         SELECT
         id,
@@ -165,7 +169,7 @@ class CodeDB:
             for row in cursor
         }
 
-    def bulk_insert(self, db_batches: dict[list[dict]]) -> None:
+    def bulk_insert(self, db_batches: dict[str, list[dict[str, Any]]]) -> None:
         pass
 
     def close(self):
@@ -175,5 +179,7 @@ class CodeDB:
 
     def __del__(self):
         if not getattr(self, "connection_closed", True):
-            getattr(self, "connection", None).close()
+            conn = getattr(self, "connection", None)
+            if conn is not None:
+                conn.close()
             self.connection_closed = True

@@ -20,7 +20,7 @@ class CodeProcessor:
         self.ignore_names: set[str] = GIT_IGNORE_LIST
 
         self.db_batch_size = 1000
-        self.db_batches: dict[list[dict]] = dict()
+        self.db_batches: dict[str, list[dict]] = dict()
         for table in TABLE_BATCH_MAP:
             self.db_batches[table] = []
 

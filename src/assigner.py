@@ -27,7 +27,7 @@ class GlobalIDAssigner:
             )
             self._init_table(table, row["max_id"] + 1)
 
-    def reserve(self, table: str, count: int) -> tuple[int]:
+    def reserve(self, table: str, count: int) -> tuple[int, ...]:
         with self._lock:
             start_id = self._counters[table]
             self._counters[table] = start_id + count

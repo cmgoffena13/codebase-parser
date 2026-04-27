@@ -107,6 +107,8 @@ class PythonParser(ParserBase):
         if name_node is None:
             return symbols
 
+        if name_node.text is None:
+            return symbols
         name = name_node.text.decode("utf-8")
         line_start = node.start_point.row + 1
         line_end = node.end_point.row + 1
@@ -207,6 +209,8 @@ class PythonParser(ParserBase):
         if not name_node:
             return None
 
+        if name_node.text is None:
+            return None
         name = name_node.text.decode("utf-8")
         line_start = node.start_point.row + 1
         line_end = node.end_point.row + 1
@@ -233,6 +237,8 @@ class PythonParser(ParserBase):
         if node.parent and node.parent.type == "decorated_definition":
             for child in node.parent.children:
                 if child.type == "decorator":
+                    if child.text is None:
+                        continue
                     dec_text = child.text.decode("utf-8", errors="replace").strip()
                     if dec_text.startswith("@"):
                         dec_text = dec_text[1:].strip()
@@ -248,6 +254,8 @@ class PythonParser(ParserBase):
                     continue
                 for base in child.named_children:
                     if base.type in ("identifier", "dotted_name", "attribute"):
+                        if base.text is None:
+                            continue
                         base_classes.append(base.text.decode("utf-8"))
 
         # Extract Signature
@@ -279,6 +287,8 @@ class PythonParser(ParserBase):
                     str_node = stmt
 
                 if str_node is not None:
+                    if str_node.text is None:
+                        continue
                     raw = str_node.text.decode("utf-8", errors="replace")
                     try:
                         docstring = ast.literal_eval(raw)
@@ -359,6 +369,8 @@ class PythonParser(ParserBase):
     def _extract_import(self, node: Node, file_id: int) -> None:
         """Extract Import Statement."""
         line_number = node.start_point.row + 1
+        if node.text is None:
+            return
         signature = node.text.decode("utf-8")
         import_scope = "module" if not self.stack else "function"
 
@@ -375,12 +387,16 @@ class PythonParser(ParserBase):
                     break
             if relative_node is not None:
                 import_type = "relative"
+                if relative_node.text is None:
+                    return
                 import_path = relative_node.text.decode("utf-8")
 
             # Absolute import fallback (e.g. `from typing import X`)
             if not import_path:
                 for child in node.children:
                     if child.type == "dotted_name":
+                        if child.text is None:
+                            continue
                         import_path = child.text.decode("utf-8")
                         break
 
@@ -392,8 +408,14 @@ class PythonParser(ParserBase):
                     alias_node = child.child_by_field_name("alias")
                     if not name_node:
                         continue
+                    if name_node.text is None:
+                        continue
                     imported_symbol = name_node.text.decode("utf-8")
-                    alias = alias_node.text.decode("utf-8") if alias_node else None
+                    alias = (
+                        alias_node.text.decode("utf-8")
+                        if alias_node is not None and alias_node.text is not None
+                        else None
+                    )
                 elif child.type == "dotted_name":
                     # Skip the module part (absolute dotted_name or relative_import's dotted_name)
                     if (
@@ -403,8 +425,11 @@ class PythonParser(ParserBase):
                         continue
                     if (
                         relative_node is None
+                        and child.text is not None
                         and child.text.decode("utf-8") == import_path
                     ):
+                        continue
+                    if child.text is None:
                         continue
                     imported_symbol = child.text.decode("utf-8")
 
@@ -441,9 +466,17 @@ class PythonParser(ParserBase):
                     alias_node = child.child_by_field_name("alias")
                     if not name_node:
                         continue
+                    if name_node.text is None:
+                        continue
                     import_path = name_node.text.decode("utf-8")
-                    alias = alias_node.text.decode("utf-8") if alias_node else None
+                    alias = (
+                        alias_node.text.decode("utf-8")
+                        if alias_node is not None and alias_node.text is not None
+                        else None
+                    )
                 elif child.type == "dotted_name":
+                    if child.text is None:
+                        continue
                     import_path = child.text.decode("utf-8")
 
                 if import_path is None:
@@ -479,14 +512,20 @@ class PythonParser(ParserBase):
             # func() -> target is 'func'
             func_node = node.child_by_field_name("function")
             if func_node:
+                if func_node.text is None:
+                    return
                 target_name = func_node.text.decode("utf-8")
         elif ref_kind == "access":
             # obj.attr -> target is 'attr'
             attr_node = node.child_by_field_name("attribute")
             if attr_node:
+                if attr_node.text is None:
+                    return
                 target_name = attr_node.text.decode("utf-8")
         elif ref_kind == "type_annotation":
             # x: Type -> target is 'Type'
+            if node.text is None:
+                return
             target_name = node.text.decode("utf-8")
 
         if not target_name:
@@ -516,7 +555,9 @@ class PythonParser(ParserBase):
                     "source_file_id": file_id,
                     "source_line": node.start_point.row + 1,
                     "ref_kind": ref_kind,
-                    "context": node.text.decode("utf-8"),
+                    "context": (
+                        node.text.decode("utf-8") if node.text is not None else ""
+                    ),
                 }
             )
         return
