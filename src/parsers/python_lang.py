@@ -520,12 +520,18 @@ class PythonParser(ParserBase):
                     return
                 target_name = func_node.text.decode("utf-8")
         elif ref_kind == "access":
-            # obj.attr -> target is 'attr'
+            # obj.attr -> target is full chain like "obj.attr" or "a.b.c"
             attr_node = node.child_by_field_name("attribute")
-            if attr_node:
-                if attr_node.text is None:
-                    return
-                target_name = attr_node.text.decode("utf-8")
+            obj_node = node.child_by_field_name("object")
+            if not attr_node or attr_node.text is None:
+                return
+
+            leaf_name = attr_node.text.decode("utf-8")
+            if obj_node is not None and obj_node.text is not None:
+                obj_text = obj_node.text.decode("utf-8")
+                target_name = f"{obj_text}.{leaf_name}" if obj_text else leaf_name
+            else:
+                target_name = leaf_name
         elif ref_kind == "type_annotation":
             # x: Type -> target is 'Type'
             if node.text is None:
@@ -548,7 +554,8 @@ class PythonParser(ParserBase):
         # If it's a simple name, we can't resolve it yet, so keep raw
         # But if it's "module.func", we keep "module.func"
 
-        key = (target_name, ref_kind)
+        source_line = node.start_point.row + 1
+        key = (target_name, ref_kind, source_line)
         if key in self.symbols_references_snapshot:
             self.symbols_references_snapshot[key]["seen"] = True
         else:
@@ -557,7 +564,7 @@ class PythonParser(ParserBase):
                     "ref_symbol_name": target_name,
                     "ref_symbol_qualified_name": qualified_name,
                     "source_file_id": file_id,
-                    "source_line": node.start_point.row + 1,
+                    "source_line": source_line,
                     "ref_kind": ref_kind,
                     "context": (
                         node.text.decode("utf-8") if node.text is not None else ""

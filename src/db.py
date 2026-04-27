@@ -126,7 +126,7 @@ class CodeDB:
 
     def get_symbol_references_snapshot(
         self, file_id: int
-    ) -> dict[tuple[str, str], dict[str, Any]]:
+    ) -> dict[tuple[str, str, int], dict[str, Any]]:
         query = """
         SELECT
         id,
@@ -142,7 +142,7 @@ class CodeDB:
         """
         cursor = self.connection.execute(query, (file_id,))
         return {
-            (row["name"], row["ref_kind"]): {
+            (row["name"], row["ref_kind"], row["source_line"]): {
                 "id": row["id"],
                 "seen": False,
             }
