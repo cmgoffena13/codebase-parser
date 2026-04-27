@@ -9,3 +9,9 @@ dependencies = [
     "tree-sitter-python>=0.25.0",
     "xxhash>=3.6.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+    "pytest-xdist>=3.8.0",
+]

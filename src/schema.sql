@@ -46,7 +46,8 @@ CREATE TABLE IF NOT EXISTS symbols (
     docstring       TEXT,                            
     modifiers       TEXT,                           
     base_classes    TEXT,                          
-    language        TEXT NOT NULL                  
+    language        TEXT NOT NULL,
+    is_test         BOOLEAN NOT NULL DEFAULT FALSE               
 );
 
 DROP TABLE IF EXISTS symbol_references;

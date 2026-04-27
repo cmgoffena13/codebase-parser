@@ -18,7 +18,7 @@ class PythonParser(ParserBase):
         self.parser = parser
         self.assigner = assigner
         self.db = db
-        self.stack: List[Tuple[int, str, str]] = []
+        self.stack: List[Tuple[int, str, str, bool]] = []
         self.symbols: List[Dict] = []
         self.imports: List[Dict] = []
         self.symbol_references_staging: List[Dict] = []
@@ -65,7 +65,14 @@ class PythonParser(ParserBase):
                 qualified_name = symbol_data["qualified_name"]
                 self.symbols.append(symbol_data)
                 # Push to stack
-                self.stack.append((symbol_id, qualified_name, symbol_data["kind"]))
+                self.stack.append(
+                    (
+                        symbol_id,
+                        qualified_name,
+                        symbol_data["kind"],
+                        symbol_data.get("is_test", False),
+                    )
+                )
         elif node.type in (
             "assignment",
             "annotated_assignment",
@@ -233,12 +240,14 @@ class PythonParser(ParserBase):
                         modifiers.append(dec_text)
 
         # Extract Base Classes (for classes only)
-        base_classes = []
+        base_classes: list[str] = []
         if kind == "class":
-            superclasses = node.child_by_field_name("superclasses")
-            if superclasses:
-                for base in superclasses.children:
-                    if base.type in ("identifier", "dotted_name"):
+            # tree-sitter-python represents bases as an `argument_list` child.
+            for child in node.children:
+                if child.type != "argument_list":
+                    continue
+                for base in child.named_children:
+                    if base.type in ("identifier", "dotted_name", "attribute"):
                         base_classes.append(base.text.decode("utf-8"))
 
         # Extract Signature
@@ -277,6 +286,21 @@ class PythonParser(ParserBase):
                         docstring = raw.strip("\"'")
                     break
 
+        # Determine is_test (pytest + unittest)
+        parent_is_test = self.stack[-1][3] if self.stack else False
+        is_test = False
+        # Pytest
+        if kind == "function" and name.startswith("test_"):
+            is_test = True
+        elif kind == "class" and name.startswith("Test"):
+            is_test = True
+        # Unittest
+        elif kind == "class" and any("TestCase" in bc for bc in base_classes):
+            is_test = True
+        # Method inside a test class
+        elif kind == "method" and name.startswith("test_") and parent_is_test:
+            is_test = True
+
         key = (qualified_name, kind)
         if key in self.symbols_snapshot:
             self.symbols_snapshot[key]["seen"] = True
@@ -302,6 +326,7 @@ class PythonParser(ParserBase):
                     "modifiers": str(modifiers) if modifiers else None,
                     "language": "python",
                     "base_classes": str(base_classes) if base_classes else None,
+                    "is_test": is_test,
                 }
             else:
                 return None
@@ -328,6 +353,7 @@ class PythonParser(ParserBase):
                 "modifiers": str(modifiers) if modifiers else None,
                 "language": "python",
                 "base_classes": str(base_classes) if base_classes else None,
+                "is_test": is_test,
             }
 
     def _extract_import(self, node: Node, file_id: int) -> None:
