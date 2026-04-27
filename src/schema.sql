@@ -50,6 +50,16 @@ CREATE TABLE IF NOT EXISTS symbols (
     is_test         BOOLEAN NOT NULL DEFAULT FALSE               
 );
 
+DROP TABLE IF EXISTS symbol_references_staging;
+CREATE TABLE IF NOT EXISTS symbol_references_staging (
+    ref_symbol_name             TEXT NOT NULL,                 
+    ref_symbol_qualified_name   TEXT NULL,
+    source_file_id              INTEGER NOT NULL REFERENCES files(id),
+    source_line                 INTEGER NOT NULL,                
+    ref_kind                    TEXT NOT NULL,                  
+    context                     TEXT                             
+);
+
 DROP TABLE IF EXISTS symbol_references;
 CREATE TABLE IF NOT EXISTS symbol_references (
     id                          INTEGER NOT NULL PRIMARY KEY,
