@@ -510,6 +510,17 @@ class PythonParser(ParserBase):
     def _extract_reference(self, node: Node, ref_kind: str, file_id: int) -> None:
         """Extract Reference (Call, Access, Type)."""
 
+        # Skip access nodes that are the function part of a call — the call already
+        # captures this reference (call is a stricter access).
+        if ref_kind == "access":
+            parent = node.parent
+            if (
+                parent is not None
+                and parent.type == "call"
+                and parent.child_by_field_name("function") == node
+            ):
+                return
+
         target_name = ""
 
         if ref_kind == "call":
