@@ -97,6 +97,10 @@ class PythonParser(ParserBase):
     ) -> list[Dict]:
         symbols: list[Dict] = []
 
+        # Only capture module-level and class-body assignments (skip function/method scopes)
+        if self.stack and self.stack[-1][2] != "class":
+            return symbols
+
         # target is usually in field 'left' for assignment/augmented_assignment
         target = node.child_by_field_name("left") or node.child_by_field_name("target")
         if target is None:
