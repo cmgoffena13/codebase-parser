@@ -63,11 +63,13 @@ class CodeProcessor:
             }
         self.db.delete_directories(self.directories_snapshot)
 
-    def _normalize_path(self, path: Path) -> str:
-        result = path.with_suffix("").as_posix().lower().replace("/", ".")
-        if result.endswith(".__init__"):
-            result = result[:-9]  # Strip .__init__
-        return result
+    def _normalize_path(self, path: Path, language: str = "python") -> str:
+        posix = path.with_suffix("").as_posix().lower()
+        if language == "python":
+            posix = posix.replace("/", ".")
+            if posix.endswith(".__init__"):
+                posix = posix[:-9]
+        return posix
 
     def _process_file(self, file_name: str, directory_path: Path, full: bool) -> None:
         file_path = directory_path / file_name
