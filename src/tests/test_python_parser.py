@@ -2,6 +2,14 @@ def _index_by(items: list[dict], key: str) -> dict:
     return {item[key]: item for item in items}
 
 
+def _symbol_key(symbol: dict) -> str:
+    return symbol["qualified_name"] or symbol["name"]
+
+
+def _index_symbols(symbols: list[dict]) -> dict:
+    return {_symbol_key(symbol): symbol for symbol in symbols}
+
+
 def _assert_reference_shape(ref: dict, expected_file_id: int) -> None:
     assert ref["ref_kind"] in {"call", "access", "type_annotation"}
     assert isinstance(ref["ref_symbol_name"], str) and ref["ref_symbol_name"]
@@ -21,7 +29,7 @@ def test_python_fixture_file_parses_symbols_imports_and_references(
 
     assert symbols, "expected symbols from fixture file"
 
-    qn = {s["qualified_name"] for s in symbols}
+    qn = {_symbol_key(s) for s in symbols}
 
     # Class + method nesting
     assert "FakeClass" in qn
@@ -36,20 +44,20 @@ def test_python_fixture_file_parses_symbols_imports_and_references(
     # Variable symbols exist
     assert "fake_path" in qn
     assert "alias_variable_in_another_file" in qn
-    by_qn = _index_by(symbols, "qualified_name")
+    by_qn = _index_symbols(symbols)
     assert by_qn["fake_path"]["kind"] == "variable"
     assert by_qn["alias_variable_in_another_file"]["kind"] == "variable"
 
     # Signatures are normalized to one line
-    fake_fn = _index_by(symbols, "qualified_name")["fake_function"]
+    fake_fn = _index_symbols(symbols)["fake_function"]
     assert "\n" not in fake_fn["signature"]
-    multiline = _index_by(symbols, "qualified_name")["multiline_signature"]
+    multiline = _index_symbols(symbols)["multiline_signature"]
     assert "\n" not in multiline["signature"]
     assert multiline["signature"].startswith("def multiline_signature(")
     assert multiline["signature"].endswith(") -> int:")
 
     # Docstrings extracted
-    fake_class = _index_by(symbols, "qualified_name")["FakeClass"]
+    fake_class = _index_symbols(symbols)["FakeClass"]
     assert fake_class["docstring"]
     assert "Fake Class Milti Line Docstring" in fake_class["docstring"]
     assert (
@@ -58,7 +66,7 @@ def test_python_fixture_file_parses_symbols_imports_and_references(
     assert fake_fn["docstring"] and "Fake Function Docstring" in fake_fn["docstring"]
 
     # Decorators/modifiers extracted (stored as string currently)
-    fake_prop = _index_by(symbols, "qualified_name")["FakeClass.fake_property"]
+    fake_prop = _index_symbols(symbols)["FakeClass.fake_property"]
     assert fake_prop["modifiers"] is not None
     assert "property" in fake_prop["modifiers"]
 
@@ -98,7 +106,7 @@ def test_python_fixture_another_file_has_fakeclass_call_reference(
 ):
     file_bytes = fixture_bytes("another_file.py")
     symbols, imports, references = python_parser.parse(2, file_bytes)
-    by_qn = _index_by(symbols, "qualified_name")
+    by_qn = _index_symbols(symbols)
 
     # Should contain a call reference to FakeClass()
     assert any(
@@ -134,7 +142,7 @@ def test_symbol_references_access_and_type_annotation(python_parser, fixture_byt
 def test_is_test_detection_pytest_and_unittest(python_parser, fixture_bytes):
     file_bytes = fixture_bytes("is_test_cases.py")
     symbols, _, _ = python_parser.parse(3, file_bytes)
-    by_qn = _index_by(symbols, "qualified_name")
+    by_qn = _index_symbols(symbols)
 
     assert by_qn["test_top"]["is_test"] is True
     assert by_qn["TestPy"]["is_test"] is True

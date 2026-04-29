@@ -66,7 +66,7 @@ class PythonParser(ParserBase):
             symbol_data = self._extract_symbol(node, file_id, file_bytes)
             if symbol_data:
                 symbol_id = symbol_data["id"]
-                qualified_name = symbol_data["qualified_name"]
+                qualified_name = symbol_data["qualified_name"] or symbol_data["name"]
                 self.symbols.append(symbol_data)
                 # Push to stack
                 self.stack.append(
@@ -126,7 +126,7 @@ class PythonParser(ParserBase):
             qualified_name = f"{parent_qn}.{name}"
             parent_id = self.stack[-1][0]
         else:
-            qualified_name = name
+            qualified_name = None
             parent_id = None
 
         signature = (
@@ -138,7 +138,8 @@ class PythonParser(ParserBase):
 
         kind = "variable"
         is_test = self.stack[-1][3] if self.stack else False
-        key = (qualified_name, kind)
+        symbol_identity = qualified_name if qualified_name is not None else name
+        key = (symbol_identity, kind)
         if key in self.symbols_snapshot:
             self.symbols_snapshot[key]["seen"] = True
             if (line_start, line_end) != (
@@ -241,7 +242,7 @@ class PythonParser(ParserBase):
             parent_qn = self.stack[-1][1]
             qualified_name = f"{parent_qn}.{name}"
         else:
-            qualified_name = name
+            qualified_name = None
 
         # Extract Modifiers (Decorators)
         modifiers = []
@@ -322,7 +323,8 @@ class PythonParser(ParserBase):
         elif kind == "method" and name.startswith("test_") and parent_is_test:
             is_test = True
 
-        key = (qualified_name, kind)
+        symbol_identity = qualified_name if qualified_name is not None else name
+        key = (symbol_identity, kind)
         if key in self.symbols_snapshot:
             self.symbols_snapshot[key]["seen"] = True
 
@@ -566,11 +568,14 @@ class PythonParser(ParserBase):
         # Build Qualified Name only when we can resolve parent context.
         qualified_name = None
         if target_name.startswith("self.") or target_name.startswith("cls."):
-            if self.stack:
-                parent_qn = self.stack[-1][1]
-                # Replace self/cls with parent name
-                suffix = target_name.split(".", 1)[1]
-                qualified_name = f"{parent_qn}.{suffix}"
+            suffix = target_name.split(".", 1)[1]
+            for entry in reversed(self.stack):
+                if entry[2] == "class":
+                    qualified_name = f"{entry[1]}.{suffix}"
+                    break
+            else:
+                if self.stack:
+                    qualified_name = f"{self.stack[-1][1]}.{suffix}"
 
         # If it's a simple name, we can't resolve it yet, so keep raw
         # But if it's "module.func", we keep "module.func"
