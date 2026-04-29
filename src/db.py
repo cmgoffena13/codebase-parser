@@ -37,14 +37,14 @@ class CodeDB:
         row = self.connection.execute(query).fetchone()
         return row
 
-    def get_watermark(self) -> tuple[float, float]:
+    def get_watermark(self) -> tuple[int, int]:
         row = self.connection.execute(
             "SELECT last_full_parse, last_incremental FROM watermarks WHERE id = 1"
         ).fetchone()
         return row["last_full_parse"], row["last_incremental"]
 
     def set_watermark(
-        self, last_full_parse: Optional[float], last_incremental: float
+        self, last_full_parse: Optional[int], last_incremental: int
     ) -> None:
         if last_full_parse is not None:
             query = "UPDATE watermarks SET last_full_parse = ?, last_incremental = ? WHERE id = 1"
@@ -273,16 +273,18 @@ class CodeDB:
             """)
             self.connection.execute("DELETE FROM symbol_references_staging;")
 
-    def resolve_imports(self) -> None:
+    def resolve_imports(self, last_incremental: int) -> None:
         with self.connection:
             self.connection.execute(
                 """
                 UPDATE imports
-                SET imported_file_id = f.id
+                SET imported_file_id = f.id,
+                    updated_at = ?
                 FROM files AS f
                 WHERE f.normalized_path = imports.import_path
-                    AND imports.imported_file_id IS NULL;
-                """
+                    AND imports.updated_at > ?
+                """,
+                (last_incremental,),
             )
 
     def close(self):

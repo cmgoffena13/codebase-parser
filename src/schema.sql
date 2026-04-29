@@ -4,10 +4,10 @@ PRAGMA synchronous=NORMAL;
 DROP TABLE IF EXISTS watermarks; -- TODO: Remove this after testing.
 CREATE TABLE IF NOT EXISTS watermarks (
     id                  INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
-    last_full_parse     REAL NOT NULL DEFAULT 0.0,  
-    last_incremental    REAL DEFAULT 0.0 
+    last_full_parse     INTEGER NOT NULL DEFAULT 0,
+    last_incremental    INTEGER DEFAULT 0
 );
-INSERT OR IGNORE INTO watermarks (id, last_full_parse, last_incremental) VALUES (1, 0.0, 0.0);
+INSERT OR IGNORE INTO watermarks (id, last_full_parse, last_incremental) VALUES (1, 0, 0);
 
 DROP  TABLE IF EXISTS directories;
 CREATE TABLE IF NOT EXISTS directories (
@@ -86,4 +86,5 @@ CREATE TABLE IF NOT EXISTS imports (
     import_scope          TEXT NOT NULL, 
     signature             TEXT NOT NULL, 
     imported_file_id      INTEGER REFERENCES files(id) 
+    updated_at            INTEGER NOT NULL DEFAULT 0
 );

@@ -155,9 +155,9 @@ class CodeProcessor:
         for table in TABLE_BATCH_MAP:
             self.db_batches[table] = []
 
-    def _bulk_operations(self) -> None:
+    def _bulk_operations(self, last_incremental: int) -> None:
         self.db.resolve_symbol_references()
-        self.db.resolve_imports()
+        self.db.resolve_imports(last_incremental)
 
     def process(self, full: bool = False) -> None:
         start_time = time.time()
@@ -174,18 +174,19 @@ class CodeProcessor:
         self.db.delete_directories(self.directories_snapshot)
 
         self._insert_batch(final=True)
-        self._bulk_operations()
 
         time_now = time.time()
+        epoch_time = int(time_now)
         if full:
-            self.last_full_parse = time_now
-            self.last_incremental = time_now
+            self.last_full_parse = epoch_time
+            self.last_incremental = epoch_time
         else:
             self.last_full_parse = None
-            self.last_incremental = time_now
+            self.last_incremental = epoch_time
 
         print(json.dumps(self.db_batches.get("symbol_references", []), indent=4))
         self.db.set_watermark(self.last_full_parse, self.last_incremental)
+        self._bulk_operations(self.last_incremental)
 
         duration = time_now - start_time
         duration_ms = duration * 1000
