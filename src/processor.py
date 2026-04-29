@@ -61,7 +61,6 @@ class CodeProcessor:
                 "id": directory_id,
                 "seen": True,
             }
-        self.db.delete_directories(self.directories_snapshot)
 
     def _normalize_path(self, path: Path, language: str = "python") -> str:
         posix = path.with_suffix("").as_posix().lower()
@@ -171,6 +170,8 @@ class CodeProcessor:
             directory_path = Path(directory_path)
             self._process_directories(directory_names, directory_path)
             self._process_files(file_names, directory_path, full)
+
+        self.db.delete_directories(self.directories_snapshot)
 
         self._insert_batch(final=True)
         self._bulk_operations()
