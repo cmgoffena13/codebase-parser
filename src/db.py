@@ -170,7 +170,56 @@ class CodeDB:
         }
 
     def bulk_insert(self, db_batches: dict[str, list[dict[str, Any]]]) -> None:
-        pass
+        directories = db_batches["directories"]
+        files = db_batches["files"]
+        symbols = db_batches["symbols"]
+        symbol_references = db_batches["symbol_references"]
+        imports = db_batches["imports"]
+        with self.connection:
+            self.connection.executemany(
+                """
+                INSERT INTO directories
+                (id, parent_id, name, path, depth, file_count, total_lines)
+                VALUES (:id, :parent_id, :name, :path, :depth, :file_count, :total_lines)
+                """,
+                directories,
+            )
+
+            self.connection.executemany(
+                """
+                INSERT INTO files
+                (id, directory_id, name, path, language, content_hash, line_count)
+                VALUES (:id, :directory_id, :name, :path, :language, :content_hash, :line_count)
+                """,
+                files,
+            )
+
+            self.connection.executemany(
+                """
+                INSERT INTO symbols
+                (id, file_id, parent_id, name, qualified_name, kind, line_start, line_end, line_count, signature, docstring, modifiers, base_classes, language, is_test)
+                VALUES (:id, :file_id, :parent_id, :name, :qualified_name, :kind, :line_start, :line_end, :line_count, :signature, :docstring, :modifiers, :base_classes, :language, :is_test)
+                """,
+                symbols,
+            )
+
+            self.connection.executemany(
+                """
+                INSERT INTO symbol_references_staging
+                (ref_symbol_name, ref_symbol_qualified_name, source_file_id, source_line, ref_kind, context)
+                VALUES (:ref_symbol_name, :ref_symbol_qualified_name, :source_file_id, :source_line, :ref_kind, :context)
+                """,
+                symbol_references,
+            )
+
+            self.connection.executemany(
+                """
+                INSERT INTO imports
+                (id, file_id, import_path, imported_symbol, alias, line_number, import_type, import_scope, signature)
+                VALUES (:id, :file_id, :import_path, :imported_symbol, :alias, :line_number, :import_type, :import_scope, :signature)
+                """,
+                imports,
+            )
 
     def close(self):
         if not self.connection_closed:

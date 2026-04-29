@@ -123,7 +123,7 @@ class CodeProcessor:
             self.db_batches["imports"].extend(imports)
             self.db_batches["symbol_references"].extend(references)
             self.files_indexed += 1
-            # self._insert_batch()
+            self._insert_batch()
         else:
             return
 
@@ -162,8 +162,8 @@ class CodeProcessor:
             self._process_directories(directory_names, directory_path)
             self._process_files(file_names, directory_path, full)
 
-        # self._insert_batch(final=True)
-        # self._bulk_operations()
+        self._insert_batch(final=True)
+        self._bulk_operations()
 
         time_now = time.time()
         if full:

@@ -133,6 +133,7 @@ class PythonParser(ParserBase):
         signature = " ".join(signature.split())
 
         kind = "variable"
+        is_test = self.stack[-1][3] if self.stack else False
         key = (qualified_name, kind)
         if key in self.symbols_snapshot:
             self.symbols_snapshot[key]["seen"] = True
@@ -157,6 +158,7 @@ class PythonParser(ParserBase):
                         "modifiers": None,
                         "language": "python",
                         "base_classes": None,
+                        "is_test": is_test,
                     }
                 )
         else:
@@ -183,6 +185,7 @@ class PythonParser(ParserBase):
                     "modifiers": None,
                     "language": "python",
                     "base_classes": None,
+                    "is_test": is_test,
                 }
             )
 
