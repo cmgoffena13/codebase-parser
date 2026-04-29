@@ -5,9 +5,8 @@ def _index_by(items: list[dict], key: str) -> dict:
 def _assert_reference_shape(ref: dict, expected_file_id: int) -> None:
     assert ref["ref_kind"] in {"call", "access", "type_annotation"}
     assert isinstance(ref["ref_symbol_name"], str) and ref["ref_symbol_name"]
-    assert (
-        isinstance(ref["ref_symbol_qualified_name"], str)
-        and ref["ref_symbol_qualified_name"]
+    assert ref["ref_symbol_qualified_name"] is None or isinstance(
+        ref["ref_symbol_qualified_name"], str
     )
     assert ref["source_file_id"] == expected_file_id
     assert isinstance(ref["source_line"], int) and ref["source_line"] >= 1

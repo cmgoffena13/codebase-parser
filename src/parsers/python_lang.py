@@ -563,9 +563,8 @@ class PythonParser(ParserBase):
         if base_name in self.builtin_names or base_name in self.std_module_names:
             return
 
-        # Build Qualified Name for Context
-        # If it's "self.method", we know it's inside a class
-        qualified_name = target_name
+        # Build Qualified Name only when we can resolve parent context.
+        qualified_name = None
         if target_name.startswith("self.") or target_name.startswith("cls."):
             if self.stack:
                 parent_qn = self.stack[-1][1]
