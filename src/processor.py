@@ -63,6 +63,12 @@ class CodeProcessor:
             }
         self.db.delete_directories(self.directories_snapshot)
 
+    def _normalize_path(self, path: Path) -> str:
+        result = path.with_suffix("").as_posix().lower().replace("/", ".")
+        if result.endswith(".__init__"):
+            result = result[:-9]  # Strip .__init__
+        return result
+
     def _process_file(self, file_name: str, directory_path: Path, full: bool) -> None:
         file_path = directory_path / file_name
         file_relative_path = file_path.relative_to(self.root)
@@ -94,6 +100,7 @@ class CodeProcessor:
                 "directory_id": directory_id,
                 "name": file_name,
                 "path": str(file_relative_path),
+                "normalized_path": self._normalize_path(file_relative_path),
                 "language": FILE_EXTENSION_MAPPING.get(file_extension, None),
                 "content_hash": file_hash,
                 "line_count": line_count,
@@ -148,7 +155,8 @@ class CodeProcessor:
             self.db_batches[table] = []
 
     def _bulk_operations(self) -> None:
-        pass
+        self.db.resolve_symbol_references()
+        self.db.resolve_imports()
 
     def process(self, full: bool = False) -> None:
         start_time = time.time()

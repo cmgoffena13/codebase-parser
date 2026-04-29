@@ -25,7 +25,8 @@ CREATE TABLE IF NOT EXISTS files (
     id              INTEGER NOT NULL PRIMARY KEY,
     directory_id    INTEGER REFERENCES directories(id),
     name            TEXT NOT NULL,                       
-    path            TEXT UNIQUE NOT NULL,                
+    path            TEXT UNIQUE NOT NULL,   
+    normalized_path TEXT UNIQUE NOT NULL,             
     language        TEXT,                                          
     content_hash    TEXT NOT NULL,                               
     line_count      INTEGER NOT NULL DEFAULT 0                             

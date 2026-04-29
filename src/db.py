@@ -188,8 +188,8 @@ class CodeDB:
             self.connection.executemany(
                 """
                 INSERT INTO files
-                (id, directory_id, name, path, language, content_hash, line_count)
-                VALUES (:id, :directory_id, :name, :path, :language, :content_hash, :line_count)
+                (id, directory_id, name, path, normalized_path, language, content_hash, line_count)
+                VALUES (:id, :directory_id, :name, :path, :normalized_path, :language, :content_hash, :line_count)
                 """,
                 files,
             )
@@ -219,6 +219,37 @@ class CodeDB:
                 VALUES (:id, :file_id, :import_path, :imported_symbol, :alias, :line_number, :import_type, :import_scope, :signature)
                 """,
                 imports,
+            )
+
+    def resolve_symbol_references(self) -> None:
+        with self.connection:
+            self.connection.execute("""
+            INSERT INTO symbol_references
+            (ref_symbol_id, ref_symbol_name, ref_symbol_qualified_name, source_file_id, source_line, ref_kind, context)
+            SELECT
+            sy.id AS ref_symbol_id,
+            s.ref_symbol_name,
+            s.ref_symbol_qualified_name,
+            s.source_file_id,
+            s.source_line,
+            s.ref_kind,
+            s.context
+            FROM symbol_references_staging AS s
+            LEFT JOIN symbols AS sy
+                ON COALESCE(s.ref_symbol_qualified_name, s.ref_symbol_name) = COALESCE(sy.qualified_name, sy.name);
+            """)
+            self.connection.execute("DELETE FROM symbol_references_staging;")
+
+    def resolve_imports(self) -> None:
+        with self.connection:
+            self.connection.execute(
+                """
+                UPDATE imports
+                SET imported_file_id = f.id
+                FROM files AS f
+                WHERE f.normalized_path = imports.import_path
+                    AND imports.imported_file_id IS NULL;
+                """
             )
 
     def close(self):
