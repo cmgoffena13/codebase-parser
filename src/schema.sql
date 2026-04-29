@@ -65,6 +65,7 @@ DROP TABLE IF EXISTS symbol_references;
 CREATE TABLE IF NOT EXISTS symbol_references (
     id                          INTEGER NOT NULL PRIMARY KEY,
     ref_symbol_id               INTEGER REFERENCES symbols(id), 
+    ref_symbol_file_id          INTEGER REFERENCES files(id),
     ref_symbol_name             TEXT NOT NULL,       
     ref_symbol_qualified_name   TEXT NULL,
     source_file_id              INTEGER NOT NULL REFERENCES files(id), 

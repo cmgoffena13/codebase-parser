@@ -225,9 +225,10 @@ class CodeDB:
         with self.connection:
             self.connection.execute("""
             INSERT INTO symbol_references
-            (ref_symbol_id, ref_symbol_name, ref_symbol_qualified_name, source_file_id, source_line, ref_kind, context)
+            (ref_symbol_id, ref_symbol_file_id, ref_symbol_name, ref_symbol_qualified_name, source_file_id, source_line, ref_kind, context)
             SELECT
             sy.id AS ref_symbol_id,
+            sy.file_id AS ref_symbol_file_id,
             s.ref_symbol_name,
             s.ref_symbol_qualified_name,
             s.source_file_id,
