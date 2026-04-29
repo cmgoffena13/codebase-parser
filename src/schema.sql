@@ -85,6 +85,6 @@ CREATE TABLE IF NOT EXISTS imports (
     import_type           TEXT NOT NULL, 
     import_scope          TEXT NOT NULL, 
     signature             TEXT NOT NULL, 
-    imported_file_id      INTEGER REFERENCES files(id) 
+    imported_file_id      INTEGER REFERENCES files(id),
     updated_at            INTEGER NOT NULL DEFAULT 0
 );
