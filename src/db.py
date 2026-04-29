@@ -62,15 +62,7 @@ class CodeDB:
         dir_ids = [dir["id"] for dir in directories.values() if not dir["seen"]]
         if not dir_ids:
             return
-        with self.connection:
-            self.connection.executemany(
-                "DELETE FROM files WHERE directory_id IN (?)",
-                dir_ids,
-            )
-            self.connection.executemany(
-                "DELETE FROM directories WHERE id IN (?)",
-                dir_ids,
-            )
+        self.exec_tran("DELETE FROM directories WHERE id IN (?)", (dir_ids,))
 
     def get_files_snapshot(self) -> dict[Path, dict[str, Any]]:
         cursor = self.connection.execute(
@@ -91,22 +83,17 @@ class CodeDB:
         if not file_ids:
             return
         with self.connection:
-            self.connection.executemany(
+            self.connection.execute(
                 "DELETE FROM symbol_references WHERE ref_symbol_file_id IN (?)",
-                file_ids,
+                (file_ids,),
             )
-            self.connection.executemany(
-                "DELETE FROM imports WHERE imported_file_id IN (?)",
-                file_ids,
+            self.connection.execute(
+                "DELETE FROM imports WHERE imported_file_id IN (?)", (file_ids,)
             )
-            self.connection.executemany(
-                "DELETE FROM symbols WHERE file_id IN (?)",
-                file_ids,
+            self.connection.execute(
+                "DELETE FROM symbols WHERE file_id IN (?)", (file_ids,)
             )
-            self.connection.executemany(
-                "DELETE FROM files WHERE id IN (?)",
-                file_ids,
-            )
+            self.connection.execute("DELETE FROM files WHERE id IN (?)", (file_ids,))
 
     def get_symbols_snapshot(
         self, file_id: int
@@ -136,10 +123,14 @@ class CodeDB:
         symbol_ids = [symbol["id"] for symbol in symbols.values() if not symbol["seen"]]
         if not symbol_ids:
             return
-        query = """
-        DELETE FROM symbols WHERE id IN (?)
-        """
-        self.exec_tran(query, (symbol_ids,))
+        with self.connection:
+            self.connection.execute(
+                "DELETE FROM symbol_references WHERE ref_symbol_id IN (?)",
+                (symbol_ids,),
+            )
+            self.connection.execute(
+                "DELETE FROM symbols WHERE id IN (?)", (symbol_ids,)
+            )
 
     def get_symbol_references_snapshot(
         self, file_id: int
@@ -166,6 +157,21 @@ class CodeDB:
             for row in cursor
         }
 
+    def delete_symbol_references(
+        self, symbol_references: dict[tuple[str, str, int], dict[str, Any]]
+    ) -> None:
+        symbol_reference_ids = [
+            symbol_reference["id"]
+            for symbol_reference in symbol_references.values()
+            if not symbol_reference["seen"]
+        ]
+        if not symbol_reference_ids:
+            return
+        with self.connection:
+            self.connection.execute(
+                "DELETE FROM symbol_references WHERE id IN (?)", (symbol_reference_ids,)
+            )
+
     def get_imports_snapshot(
         self, file_id: int
     ) -> dict[tuple[str, str], dict[str, Any]]:
@@ -185,6 +191,15 @@ class CodeDB:
             }
             for row in cursor
         }
+
+    def delete_imports(self, imports: dict[tuple[str, str], dict[str, Any]]) -> None:
+        import_ids = [i["id"] for i in imports.values() if not i["seen"]]
+        if not import_ids:
+            return
+        with self.connection:
+            self.connection.execute(
+                "DELETE FROM imports WHERE id IN (?)", (import_ids,)
+            )
 
     def bulk_insert(self, db_batches: dict[str, list[dict[str, Any]]]) -> None:
         directories = db_batches["directories"]
