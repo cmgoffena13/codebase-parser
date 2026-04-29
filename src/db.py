@@ -62,11 +62,15 @@ class CodeDB:
         dir_ids = [dir["id"] for dir in directories.values() if not dir["seen"]]
         if not dir_ids:
             return
-        query = """
-            DELETE FROM files WHERE directory_id IN (?)
-            DELETE FROM directories WHERE id IN (?)
-        """
-        self.exec_tran(query, (dir_ids, dir_ids))
+        with self.connection:
+            self.connection.executemany(
+                "DELETE FROM files WHERE directory_id IN (?)",
+                dir_ids,
+            )
+            self.connection.executemany(
+                "DELETE FROM directories WHERE id IN (?)",
+                dir_ids,
+            )
 
     def get_files_snapshot(self) -> dict[Path, dict[str, Any]]:
         cursor = self.connection.execute(
@@ -86,10 +90,23 @@ class CodeDB:
         file_ids = [file["id"] for file in files.values() if not file["seen"]]
         if not file_ids:
             return
-        query = """
-        DELETE FROM files WHERE id IN (?)
-        """
-        self.exec_tran(query, (file_ids, file_ids))
+        with self.connection:
+            self.connection.executemany(
+                "DELETE FROM symbol_references WHERE ref_symbol_file_id IN (?)",
+                file_ids,
+            )
+            self.connection.executemany(
+                "DELETE FROM imports WHERE imported_file_id IN (?)",
+                file_ids,
+            )
+            self.connection.executemany(
+                "DELETE FROM symbols WHERE file_id IN (?)",
+                file_ids,
+            )
+            self.connection.executemany(
+                "DELETE FROM files WHERE id IN (?)",
+                file_ids,
+            )
 
     def get_symbols_snapshot(
         self, file_id: int
