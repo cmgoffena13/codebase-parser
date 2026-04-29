@@ -150,6 +150,7 @@ class PythonParser(ParserBase):
         kind = "variable"
         is_test = self.stack[-1][3] if self.stack else False
         symbol_identity = qualified_name if qualified_name is not None else name
+        coalesced_name = symbol_identity
         key = (symbol_identity, kind)
         if key in self.symbols_snapshot:
             self.symbols_snapshot[key]["seen"] = True
@@ -165,6 +166,7 @@ class PythonParser(ParserBase):
                         "parent_id": parent_id,
                         "name": name,
                         "qualified_name": qualified_name,
+                        "coalesced_name": coalesced_name,
                         "kind": kind,
                         "line_start": line_start,
                         "line_end": line_end,
@@ -192,6 +194,7 @@ class PythonParser(ParserBase):
                     "parent_id": parent_id,
                     "name": name,
                     "qualified_name": qualified_name,
+                    "coalesced_name": coalesced_name,
                     "kind": kind,
                     "line_start": line_start,
                     "line_end": line_end,
@@ -335,6 +338,7 @@ class PythonParser(ParserBase):
             is_test = True
 
         symbol_identity = qualified_name if qualified_name is not None else name
+        coalesced_name = symbol_identity
         key = (symbol_identity, kind)
         if key in self.symbols_snapshot:
             self.symbols_snapshot[key]["seen"] = True
@@ -351,6 +355,7 @@ class PythonParser(ParserBase):
                     "parent_id": self.stack[-1][0] if self.stack else None,
                     "name": name,
                     "qualified_name": qualified_name,
+                    "coalesced_name": coalesced_name,
                     "kind": kind,
                     "line_start": line_start,
                     "line_end": line_end,
@@ -378,6 +383,7 @@ class PythonParser(ParserBase):
                 "parent_id": self.stack[-1][0] if self.stack else None,
                 "name": name,
                 "qualified_name": qualified_name,
+                "coalesced_name": coalesced_name,
                 "kind": kind,
                 "line_start": line_start,
                 "line_end": line_end,
@@ -607,10 +613,14 @@ class PythonParser(ParserBase):
         if key in self.symbols_references_snapshot:
             self.symbols_references_snapshot[key]["seen"] = True
         else:
+            ref_symbol_coalesced_name = (
+                qualified_name if qualified_name is not None else target_name
+            )
             self.symbol_references_staging.append(
                 {
                     "ref_symbol_name": target_name,
                     "ref_symbol_qualified_name": qualified_name,
+                    "ref_symbol_coalesced_name": ref_symbol_coalesced_name,
                     "source_file_id": file_id,
                     "source_line": source_line,
                     "ref_kind": ref_kind,

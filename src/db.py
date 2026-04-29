@@ -99,13 +99,13 @@ class CodeDB:
         self, file_id: int
     ) -> dict[tuple[str, str], dict[str, Any]]:
         query = """
-            SELECT 
-            id, 
-            COALESCE(qualified_name, name) AS name,
+            SELECT
+            id,
+            coalesced_name AS name,
             kind,
             line_start,
             line_end
-            FROM symbols 
+            FROM symbols
             WHERE file_id = ?
             """
         cursor = self.connection.execute(query, (file_id,))
@@ -141,7 +141,7 @@ class CodeDB:
         CASE 
             WHEN ref_symbol_id IS NULL 
             THEN ref_symbol_name 
-            ELSE COALESCE(ref_symbol_qualified_name, ref_symbol_name) 
+            ELSE ref_symbol_coalesced_name 
         END AS name,
         ref_kind,
         source_line
@@ -229,8 +229,8 @@ class CodeDB:
             self.connection.executemany(
                 """
                 INSERT INTO symbols
-                (id, file_id, parent_id, name, qualified_name, kind, line_start, line_end, line_count, signature, docstring, modifiers, base_classes, language, is_test)
-                VALUES (:id, :file_id, :parent_id, :name, :qualified_name, :kind, :line_start, :line_end, :line_count, :signature, :docstring, :modifiers, :base_classes, :language, :is_test)
+                (id, file_id, parent_id, name, qualified_name, coalesced_name, kind, line_start, line_end, line_count, signature, docstring, modifiers, base_classes, language, is_test)
+                VALUES (:id, :file_id, :parent_id, :name, :qualified_name, :coalesced_name, :kind, :line_start, :line_end, :line_count, :signature, :docstring, :modifiers, :base_classes, :language, :is_test)
                 """,
                 symbols,
             )
@@ -238,8 +238,8 @@ class CodeDB:
             self.connection.executemany(
                 """
                 INSERT INTO symbol_references_staging
-                (ref_symbol_name, ref_symbol_qualified_name, source_file_id, source_line, ref_kind, context)
-                VALUES (:ref_symbol_name, :ref_symbol_qualified_name, :source_file_id, :source_line, :ref_kind, :context)
+                (ref_symbol_name, ref_symbol_qualified_name, ref_symbol_coalesced_name, source_file_id, source_line, ref_kind, context)
+                VALUES (:ref_symbol_name, :ref_symbol_qualified_name, :ref_symbol_coalesced_name, :source_file_id, :source_line, :ref_kind, :context)
                 """,
                 symbol_references,
             )
@@ -257,19 +257,20 @@ class CodeDB:
         with self.connection:
             self.connection.execute("""
             INSERT INTO symbol_references
-            (ref_symbol_id, ref_symbol_file_id, ref_symbol_name, ref_symbol_qualified_name, source_file_id, source_line, ref_kind, context)
+            (ref_symbol_id, ref_symbol_file_id, ref_symbol_name, ref_symbol_qualified_name, ref_symbol_coalesced_name, source_file_id, source_line, ref_kind, context)
             SELECT
             sy.id AS ref_symbol_id,
             sy.file_id AS ref_symbol_file_id,
             s.ref_symbol_name,
             s.ref_symbol_qualified_name,
+            s.ref_symbol_coalesced_name,
             s.source_file_id,
             s.source_line,
             s.ref_kind,
             s.context
             FROM symbol_references_staging AS s
             INNER JOIN symbols AS sy
-                ON COALESCE(s.ref_symbol_qualified_name, s.ref_symbol_name) = COALESCE(sy.qualified_name, sy.name);
+                ON s.ref_symbol_coalesced_name = sy.coalesced_name;
             """)
             self.connection.execute("DELETE FROM symbol_references_staging;")
 
@@ -284,7 +285,7 @@ class CodeDB:
                 WHERE f.normalized_path = imports.import_path
                     AND imports.updated_at > ?
                 """,
-                (last_incremental,),
+                (last_incremental, last_incremental),
             )
 
     def close(self):

@@ -3,7 +3,7 @@ def _index_by(items: list[dict], key: str) -> dict:
 
 
 def _symbol_key(symbol: dict) -> str:
-    return symbol["qualified_name"] or symbol["name"]
+    return symbol["coalesced_name"]
 
 
 def _index_symbols(symbols: list[dict]) -> dict:
