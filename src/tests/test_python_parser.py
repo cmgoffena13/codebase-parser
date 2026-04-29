@@ -122,7 +122,11 @@ def test_python_fixture_another_file_has_fakeclass_call_reference(
 
 def test_symbol_references_access_and_type_annotation(python_parser, fixture_bytes):
     file_bytes = fixture_bytes("references_cases.py")
-    _, _, references = python_parser.parse(4, file_bytes)
+    symbols, _, references = python_parser.parse(4, file_bytes)
+    by_qn = _index_symbols(symbols)
+
+    assert "RefClass.value" in by_qn
+    assert by_qn["RefClass.value"]["kind"] == "variable"
 
     assert any(
         r["ref_kind"] == "access" and r["ref_symbol_name"] == "self.value"

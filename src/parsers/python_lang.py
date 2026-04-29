@@ -1,6 +1,7 @@
 import ast
 import builtins
 import sys
+import typing
 from typing import Dict, List, Optional, Tuple
 
 from tree_sitter import Node, Parser
@@ -21,6 +22,9 @@ class PythonParser(ParserBase):
         self.assigner = assigner
         self.db = db
         self.builtin_names: set[str] = set(dir(builtins))
+        self.builtin_names.update(
+            name for name in getattr(typing, "__all__", []) if isinstance(name, str)
+        )
         self.std_module_names: set[str] = getattr(sys, "stdlib_module_names", set())
         self.stack: List[Tuple[int, str, str, bool]] = []
         self.symbols: List[Dict] = []
@@ -101,8 +105,12 @@ class PythonParser(ParserBase):
     ) -> list[Dict]:
         symbols: list[Dict] = []
 
-        # Only capture module-level and class-body assignments (skip function/method scopes)
-        if self.stack and self.stack[-1][2] != "class":
+        # Only capture module/class plus __init__ assignments.
+        if (
+            self.stack
+            and self.stack[-1][2] != "class"
+            and not self.stack[-1][1].endswith(".__init__")
+        ):
             return symbols
 
         # target is usually in field 'left' for assignment/augmented_assignment
@@ -110,19 +118,22 @@ class PythonParser(ParserBase):
         if target is None:
             return symbols
 
-        # Only handle simple identifiers (x = ..., y: int = ...) for now
-        name_node = target if target.type == "identifier" else None
-        if name_node is None:
+        name = ""
+        if target.type == "identifier" and target.text is not None:
+            name = target.text.decode("utf-8")
+        elif target.type == "attribute" and target.text is not None:
+            text = target.text.decode("utf-8")
+            if text.startswith("self.") or text.startswith("cls."):
+                name = text.split(".", 1)[1]
+        if not name:
             return symbols
-
-        if name_node.text is None:
-            return symbols
-        name = name_node.text.decode("utf-8")
         line_start = node.start_point.row + 1
         line_end = node.end_point.row + 1
 
         if self.stack:
             parent_qn = self.stack[-1][1]
+            if target.type == "attribute" and parent_qn.endswith(".__init__"):
+                parent_qn = parent_qn.rsplit(".", 1)[0]
             qualified_name = f"{parent_qn}.{name}"
             parent_id = self.stack[-1][0]
         else:
@@ -553,17 +564,28 @@ class PythonParser(ParserBase):
             else:
                 target_name = leaf_name
         elif ref_kind == "type_annotation":
-            # x: Type -> target is 'Type'
+            # x: Type -> normalize annotation target
             if node.text is None:
                 return
-            target_name = node.text.decode("utf-8")
+            target_name = node.text.decode("utf-8").strip()
+            if target_name.endswith("]"):
+                if target_name.startswith("Optional["):
+                    target_name = target_name[len("Optional[") : -1].strip()
+                elif target_name.startswith("typing.Optional["):
+                    target_name = target_name[len("typing.Optional[") : -1].strip()
+            if "[" in target_name:
+                target_name = target_name.split("[", 1)[0].strip()
 
         if not target_name:
             return
 
         base_name = target_name.split(".", 1)[0]
-        if base_name in self.builtin_names or base_name in self.std_module_names:
-            return
+        if ref_kind == "type_annotation":
+            if base_name in self.builtin_names:
+                return
+        else:
+            if base_name in self.builtin_names or base_name in self.std_module_names:
+                return
 
         # Build Qualified Name only when we can resolve parent context.
         qualified_name = None

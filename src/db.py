@@ -235,7 +235,7 @@ class CodeDB:
             s.ref_kind,
             s.context
             FROM symbol_references_staging AS s
-            LEFT JOIN symbols AS sy
+            INNER JOIN symbols AS sy
                 ON COALESCE(s.ref_symbol_qualified_name, s.ref_symbol_name) = COALESCE(sy.qualified_name, sy.name);
             """)
             self.connection.execute("DELETE FROM symbol_references_staging;")
