@@ -87,8 +87,8 @@ def test_python_fixture_file_parses_symbols_imports_and_references(
         r["ref_kind"] == "access" and r["ref_symbol_name"] == "self.fake_data"
         for r in references
     )
-    # type annotations from multiline_signature args
-    assert any(
+    # type annotations from multiline_signature args skip builtins like int
+    assert not any(
         r["ref_kind"] == "type_annotation" and r["ref_symbol_name"] == "int"
         for r in references
     )
@@ -121,12 +121,12 @@ def test_symbol_references_access_and_type_annotation(python_parser, fixture_byt
         r["ref_kind"] == "access" and r["ref_symbol_name"] == "self.value"
         for r in references
     )
-    # type annotations should include Path and int
+    # type annotations should include non-builtins and skip builtins
     assert any(
         r["ref_kind"] == "type_annotation" and r["ref_symbol_name"] == "Path"
         for r in references
     )
-    assert any(
+    assert not any(
         r["ref_kind"] == "type_annotation" and r["ref_symbol_name"] == "int"
         for r in references
     )

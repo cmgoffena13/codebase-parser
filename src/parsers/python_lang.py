@@ -1,4 +1,6 @@
 import ast
+import builtins
+import sys
 from typing import Dict, List, Optional, Tuple
 
 from tree_sitter import Node, Parser
@@ -18,6 +20,8 @@ class PythonParser(ParserBase):
         self.parser = parser
         self.assigner = assigner
         self.db = db
+        self.builtin_names: set[str] = set(dir(builtins))
+        self.std_module_names: set[str] = getattr(sys, "stdlib_module_names", set())
         self.stack: List[Tuple[int, str, str, bool]] = []
         self.symbols: List[Dict] = []
         self.imports: List[Dict] = []
@@ -553,6 +557,10 @@ class PythonParser(ParserBase):
             target_name = node.text.decode("utf-8")
 
         if not target_name:
+            return
+
+        base_name = target_name.split(".", 1)[0]
+        if base_name in self.builtin_names or base_name in self.std_module_names:
             return
 
         # Build Qualified Name for Context
