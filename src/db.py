@@ -277,10 +277,10 @@ class CodeDB:
                 """
                 UPDATE imports
                 SET imported_file_id = f.id,
-                    updated_at = ?
+                    watermark = ?
                 FROM files AS f
                 WHERE f.normalized_path = imports.import_path
-                    AND imports.updated_at BETWEEN ? AND ?
+                    AND imports.watermark BETWEEN ? AND ?
                 """,
                 (last_incremental, now, last_incremental),
             )
