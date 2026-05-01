@@ -155,11 +155,12 @@ class CodeProcessor:
         for table in TABLE_BATCH_MAP:
             self.db_batches[table] = []
 
-    def _bulk_operations(self, last_incremental: int) -> None:
+    def _bulk_operations(self, now: int, last_incremental: int) -> None:
         self.db.resolve_symbol_references()
-        self.db.resolve_imports(last_incremental)
+        self.db.resolve_imports(now, last_incremental)
 
     def process(self, full: bool = False) -> None:
+        now = int(time.time())
         start_time = time.time()
         for directory_path, directory_names, file_names in os.walk(self.root):
             directory_names[:] = [
@@ -185,7 +186,7 @@ class CodeProcessor:
             self.last_incremental = epoch_time
 
         self.db.set_watermark(self.last_full_parse, self.last_incremental)
-        self._bulk_operations(self.last_incremental)
+        self._bulk_operations(now, self.last_incremental)
 
         duration = time_now - start_time
         duration_ms = duration * 1000

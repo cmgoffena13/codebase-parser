@@ -271,7 +271,7 @@ class CodeDB:
             """)
             self.connection.execute("DELETE FROM symbol_references_staging;")
 
-    def resolve_imports(self, last_incremental: int) -> None:
+    def resolve_imports(self, now: int, last_incremental: int) -> None:
         with self.connection:
             self.connection.execute(
                 """
@@ -280,9 +280,9 @@ class CodeDB:
                     updated_at = ?
                 FROM files AS f
                 WHERE f.normalized_path = imports.import_path
-                    AND imports.updated_at > ?
+                    AND imports.updated_at BETWEEN ? AND ?
                 """,
-                (last_incremental, last_incremental),
+                (last_incremental, now, last_incremental),
             )
 
     def close(self):
