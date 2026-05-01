@@ -49,6 +49,10 @@ class PythonParser(ParserBase):
         )
         self.imports_snapshot = self.db.get_imports_snapshot(file_id)
         self._walk(root_node, file_id, file_bytes)
+
+        self.db.delete_symbol_references(self.symbols_references_snapshot)
+        self.db.delete_symbols(self.symbols_snapshot)
+        self.db.delete_imports(self.imports_snapshot)
         return self.symbols, self.imports, self.symbol_references
 
     def _walk(self, node: Node, file_id: int, file_bytes: bytes) -> None:

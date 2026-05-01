@@ -82,18 +82,8 @@ class CodeDB:
         file_ids = [file["id"] for file in files.values() if not file["seen"]]
         if not file_ids:
             return
-        with self.connection:
-            self.connection.execute(
-                "DELETE FROM symbol_references WHERE ref_symbol_file_id IN (?)",
-                (file_ids,),
-            )
-            self.connection.execute(
-                "DELETE FROM imports WHERE imported_file_id IN (?)", (file_ids,)
-            )
-            self.connection.execute(
-                "DELETE FROM symbols WHERE file_id IN (?)", (file_ids,)
-            )
-            self.connection.execute("DELETE FROM files WHERE id IN (?)", (file_ids,))
+
+        self.exec_tran("DELETE FROM files WHERE id IN (?)", (file_ids,))
 
     def get_symbols_snapshot(
         self, file_id: int
@@ -119,18 +109,15 @@ class CodeDB:
             for row in cursor
         }
 
-    def delete_symbols(self, symbols: dict[tuple[str, str], dict[str, Any]]) -> None:
-        symbol_ids = [symbol["id"] for symbol in symbols.values() if not symbol["seen"]]
+    def delete_symbols(
+        self, symbols_snapshot: dict[tuple[str, str], dict[str, Any]]
+    ) -> None:
+        symbol_ids = [
+            symbol["id"] for symbol in symbols_snapshot.values() if not symbol["seen"]
+        ]
         if not symbol_ids:
             return
-        with self.connection:
-            self.connection.execute(
-                "DELETE FROM symbol_references WHERE ref_symbol_id IN (?)",
-                (symbol_ids,),
-            )
-            self.connection.execute(
-                "DELETE FROM symbols WHERE id IN (?)", (symbol_ids,)
-            )
+        self.exec_tran("DELETE FROM symbols WHERE id IN (?)", (symbol_ids,))
 
     def get_symbol_references_snapshot(
         self, file_id: int
@@ -154,19 +141,18 @@ class CodeDB:
         }
 
     def delete_symbol_references(
-        self, symbol_references: dict[tuple[str, str, int], dict[str, Any]]
+        self, symbol_references_snapshot: dict[tuple[str, str, int], dict[str, Any]]
     ) -> None:
         symbol_reference_ids = [
             symbol_reference["id"]
-            for symbol_reference in symbol_references.values()
+            for symbol_reference in symbol_references_snapshot.values()
             if not symbol_reference["seen"]
         ]
         if not symbol_reference_ids:
             return
-        with self.connection:
-            self.connection.execute(
-                "DELETE FROM symbol_references WHERE id IN (?)", (symbol_reference_ids,)
-            )
+        self.exec_tran(
+            "DELETE FROM symbol_references WHERE id IN (?)", (symbol_reference_ids,)
+        )
 
     def get_imports_snapshot(
         self, file_id: int
@@ -188,14 +174,13 @@ class CodeDB:
             for row in cursor
         }
 
-    def delete_imports(self, imports: dict[tuple[str, str], dict[str, Any]]) -> None:
-        import_ids = [i["id"] for i in imports.values() if not i["seen"]]
+    def delete_imports(
+        self, imports_snapshot: dict[tuple[str, str], dict[str, Any]]
+    ) -> None:
+        import_ids = [i["id"] for i in imports_snapshot.values() if not i["seen"]]
         if not import_ids:
             return
-        with self.connection:
-            self.connection.execute(
-                "DELETE FROM imports WHERE id IN (?)", (import_ids,)
-            )
+        self.exec_tran("DELETE FROM imports WHERE id IN (?)", (import_ids,))
 
     def bulk_insert(self, db_batches: dict[str, list[dict[str, Any]]]) -> None:
         directories = db_batches["directories"]
