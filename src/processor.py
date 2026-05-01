@@ -197,7 +197,7 @@ class CodeProcessor:
                 del self.directory_deltas[dir_id]
 
     def process(self, full: bool = False) -> None:
-        now = int(time.time())
+        start_epoch = int(time.time())
         start_time = time.time()
         for directory_path, directory_names, file_names in os.walk(self.root):
             directory_names[:] = [
@@ -216,16 +216,16 @@ class CodeProcessor:
         self._insert_batch(final=True)
 
         time_now = time.time()
-        epoch_time = int(time_now)
+        end_epoch = int(time_now)
         if full:
-            self.last_full_parse = epoch_time
-            self.last_incremental = epoch_time
+            self.last_full_parse = end_epoch
+            self.last_incremental = end_epoch
         else:
             self.last_full_parse = None
-            self.last_incremental = epoch_time
+            self.last_incremental = end_epoch
 
         self.db.set_watermark(self.last_full_parse, self.last_incremental)
-        self._bulk_operations(now, self.last_incremental)
+        self._bulk_operations(start_epoch, self.last_incremental)
         self.db.close()
 
         duration = time_now - start_time
