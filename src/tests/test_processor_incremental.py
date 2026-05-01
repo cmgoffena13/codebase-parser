@@ -81,3 +81,34 @@ def test_full_then_incremental_identical_counts(tmp_path: Path) -> None:
     after_inc = _db_counts(tmp_path)
 
     assert after_full == after_inc
+
+
+def test_incremental_mutation_updates_counts_and_deletes(tmp_path: Path) -> None:
+    _write_nested_fixture(tmp_path)
+
+    db1 = CodeDB(tmp_path)
+    CodeProcessor(db1, tmp_path).process(full=True)
+    before = _db_counts(tmp_path)
+
+    # Mutate file: remove the call and add a few lines
+    mod = tmp_path / "pkg" / "mod.py"
+    mod.write_text(
+        '''"""nested pkg module."""
+class Outer:
+    def method(self):
+        x = 1
+        y = 2
+        z = 3
+        return x + y + z
+''',
+        encoding="utf-8",
+    )
+
+    db2 = CodeDB(tmp_path)
+    CodeProcessor(db2, tmp_path).process(full=True)
+    after = _db_counts(tmp_path)
+
+    # Files/symbols should remain stable; references should drop because the call is removed.
+    assert after["files"] == before["files"]
+    assert after["symbols"] == before["symbols"]
+    assert after["symbol_references"] < before["symbol_references"]

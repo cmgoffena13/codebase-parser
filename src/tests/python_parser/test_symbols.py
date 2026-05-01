@@ -1,0 +1,89 @@
+from src.tests.python_parser._assertions import (
+    assert_imports_invariants,
+    assert_symbol_references_invariants,
+    assert_symbols_invariants,
+    index_symbols,
+    symbol_key,
+)
+
+
+def test_python_fixture_file_parses_symbols_imports_and_references(
+    python_parser, fixture_bytes
+):
+    file_bytes = fixture_bytes("file.py")
+    symbols, imports, references = python_parser.parse(1, file_bytes)
+
+    assert len(symbols) == 11
+    assert len(imports) == 3
+    assert len(references) == 6
+    assert_symbols_invariants(symbols)
+    assert_imports_invariants(imports)
+    assert_symbol_references_invariants(references)
+
+    qn = {symbol_key(s) for s in symbols}
+
+    # Class + method nesting
+    assert "FakeClass" in qn
+    assert "FakeClass.__init__" in qn
+    assert "FakeClass.fake_method" in qn
+    assert "FakeClass.fake_property" in qn
+
+    # Function + nested function
+    assert "fake_function" in qn
+    assert "fake_function.nested_fake_function" in qn
+
+    # Variable symbols exist
+    assert "fake_path" in qn
+    assert "alias_variable_in_another_file" in qn
+    by_qn = index_symbols(symbols)
+    assert by_qn["fake_path"]["kind"] == "variable"
+    assert by_qn["alias_variable_in_another_file"]["kind"] == "variable"
+
+    # Signatures are normalized to one line
+    fake_fn = index_symbols(symbols)["fake_function"]
+    assert "\n" not in fake_fn["signature"]
+    multiline = index_symbols(symbols)["multiline_signature"]
+    assert "\n" not in multiline["signature"]
+    assert multiline["signature"].startswith("def multiline_signature(")
+    assert multiline["signature"].endswith(") -> int:")
+
+    # Docstrings extracted
+    fake_class = index_symbols(symbols)["FakeClass"]
+    assert fake_class["docstring"]
+    assert "Fake Class Milti Line Docstring" in fake_class["docstring"]
+    assert (
+        "This is a fake class with a multi line docstring." in fake_class["docstring"]
+    )
+    assert fake_fn["docstring"] and "Fake Function Docstring" in fake_fn["docstring"]
+
+    # Decorators/modifiers extracted (stored as string currently)
+    fake_prop = index_symbols(symbols)["FakeClass.fake_property"]
+    assert fake_prop["modifiers"] is not None
+    assert "property" in fake_prop["modifiers"]
+
+
+def test_python_fixture_another_file_has_fakeclass_call_reference(
+    python_parser, fixture_bytes
+):
+    file_bytes = fixture_bytes("another_file.py")
+    symbols, imports, references = python_parser.parse(2, file_bytes)
+
+    assert len(symbols) == 4
+    assert len(imports) == 1
+    assert len(references) == 2
+    assert_symbols_invariants(symbols)
+    assert_imports_invariants(imports)
+    assert_symbol_references_invariants(references)
+
+    by_qn = index_symbols(symbols)
+
+    # Should contain a call reference to FakeClass()
+    assert any(
+        r["ref_kind"] == "call" and "FakeClass" in r["ref_symbol_name"]
+        for r in references
+    )
+
+    # Base classes extracted
+    assert "AnotherClass" in by_qn
+    assert by_qn["AnotherClass"]["base_classes"] is not None
+    assert "FakeClass" in by_qn["AnotherClass"]["base_classes"]
