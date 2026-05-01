@@ -225,6 +225,7 @@ class CodeProcessor:
 
         self.db.set_watermark(self.last_full_parse, self.last_incremental)
         self._bulk_operations(now, self.last_incremental)
+        self.db.close()
 
         duration = time_now - start_time
         duration_ms = duration * 1000
