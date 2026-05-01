@@ -629,5 +629,5 @@ class PythonParser(ParserBase):
                     ),
                 }
             )
-            self.symbols_references_snapshot[key]["seen"] = True
+            self.symbols_references_snapshot[key] = {"id": None, "seen": True}
         return
