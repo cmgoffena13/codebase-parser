@@ -184,7 +184,6 @@ class CodeProcessor:
             self.last_full_parse = None
             self.last_incremental = epoch_time
 
-        print(json.dumps(self.db_batches.get("symbol_references", []), indent=4))
         self.db.set_watermark(self.last_full_parse, self.last_incremental)
         self._bulk_operations(self.last_incremental)
 

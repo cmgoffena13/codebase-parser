@@ -3,7 +3,7 @@ def _index_by(items: list[dict], key: str) -> dict:
 
 
 def _symbol_key(symbol: dict) -> str:
-    return symbol["coalesced_name"]
+    return symbol["full_name"]
 
 
 def _index_symbols(symbols: list[dict]) -> dict:

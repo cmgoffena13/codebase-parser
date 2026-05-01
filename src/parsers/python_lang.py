@@ -29,7 +29,7 @@ class PythonParser(ParserBase):
         self.stack: List[Tuple[int, str, str, bool]] = []
         self.symbols: List[Dict] = []
         self.imports: List[Dict] = []
-        self.symbol_references_staging: List[Dict] = []
+        self.symbol_references: List[Dict] = []
         self.symbols_snapshot = {}
         self.symbols_references_snapshot = {}
         self.imports_snapshot = {}
@@ -40,7 +40,7 @@ class PythonParser(ParserBase):
         self.stack = []
         self.symbols = []
         self.imports = []
-        self.symbol_references_staging = []
+        self.symbol_references = []
         tree = self.parser.parse(file_bytes)
         root_node = tree.root_node
         self.symbols_snapshot = self.db.get_symbols_snapshot(file_id)
@@ -49,7 +49,7 @@ class PythonParser(ParserBase):
         )
         self.imports_snapshot = self.db.get_imports_snapshot(file_id)
         self._walk(root_node, file_id, file_bytes)
-        return self.symbols, self.imports, self.symbol_references_staging
+        return self.symbols, self.imports, self.symbol_references
 
     def _walk(self, node: Node, file_id: int, file_bytes: bytes) -> None:
         """Recursive DFS traversal."""
@@ -150,7 +150,7 @@ class PythonParser(ParserBase):
         kind = "variable"
         is_test = self.stack[-1][3] if self.stack else False
         symbol_identity = qualified_name if qualified_name is not None else name
-        coalesced_name = symbol_identity
+        full_name = symbol_identity
         key = (symbol_identity, kind)
         if key in self.symbols_snapshot:
             self.symbols_snapshot[key]["seen"] = True
@@ -166,7 +166,7 @@ class PythonParser(ParserBase):
                         "parent_id": parent_id,
                         "name": name,
                         "qualified_name": qualified_name,
-                        "coalesced_name": coalesced_name,
+                        "full_name": full_name,
                         "kind": kind,
                         "line_start": line_start,
                         "line_end": line_end,
@@ -194,7 +194,7 @@ class PythonParser(ParserBase):
                     "parent_id": parent_id,
                     "name": name,
                     "qualified_name": qualified_name,
-                    "coalesced_name": coalesced_name,
+                    "full_name": full_name,
                     "kind": kind,
                     "line_start": line_start,
                     "line_end": line_end,
@@ -338,7 +338,7 @@ class PythonParser(ParserBase):
             is_test = True
 
         symbol_identity = qualified_name if qualified_name is not None else name
-        coalesced_name = symbol_identity
+        full_name = symbol_identity
         key = (symbol_identity, kind)
         if key in self.symbols_snapshot:
             self.symbols_snapshot[key]["seen"] = True
@@ -355,7 +355,7 @@ class PythonParser(ParserBase):
                     "parent_id": self.stack[-1][0] if self.stack else None,
                     "name": name,
                     "qualified_name": qualified_name,
-                    "coalesced_name": coalesced_name,
+                    "full_name": full_name,
                     "kind": kind,
                     "line_start": line_start,
                     "line_end": line_end,
@@ -383,7 +383,7 @@ class PythonParser(ParserBase):
                 "parent_id": self.stack[-1][0] if self.stack else None,
                 "name": name,
                 "qualified_name": qualified_name,
-                "coalesced_name": coalesced_name,
+                "full_name": full_name,
                 "kind": kind,
                 "line_start": line_start,
                 "line_end": line_end,
@@ -609,24 +609,24 @@ class PythonParser(ParserBase):
         # But if it's "module.func", we keep "module.func"
 
         source_line = node.start_point.row + 1
-        key = (target_name, ref_kind, source_line)
+        ref_symbol_full_name = (
+            qualified_name if qualified_name is not None else target_name
+        )
+        key = (ref_symbol_full_name, ref_kind, source_line)
         if key in self.symbols_references_snapshot:
             self.symbols_references_snapshot[key]["seen"] = True
         else:
             symbol_reference_id = self.assigner.reserve("symbol_references", 1)[0]
-            ref_symbol_coalesced_name = (
-                qualified_name if qualified_name is not None else target_name
-            )
             self.symbols_references_snapshot[key] = {
                 "id": symbol_reference_id,
                 "seen": True,
             }
-            self.symbol_references_staging.append(
+            self.symbol_references.append(
                 {
                     "id": symbol_reference_id,
                     "ref_symbol_name": target_name,
                     "ref_symbol_qualified_name": qualified_name,
-                    "ref_symbol_coalesced_name": ref_symbol_coalesced_name,
+                    "ref_symbol_full_name": ref_symbol_full_name,
                     "source_file_id": file_id,
                     "source_line": source_line,
                     "ref_kind": ref_kind,
@@ -635,5 +635,4 @@ class PythonParser(ParserBase):
                     ),
                 }
             )
-            self.symbols_references_snapshot[key] = {"id": None, "seen": True}
         return

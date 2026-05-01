@@ -101,7 +101,7 @@ class CodeDB:
         query = """
             SELECT
             id,
-            coalesced_name AS name,
+            full_name AS name,
             kind,
             line_start,
             line_end
@@ -138,7 +138,7 @@ class CodeDB:
         query = """
         SELECT
         id,
-        ref_symbol_coalesced_name AS name,
+        ref_symbol_full_name AS name,
         ref_kind,
         source_line
         FROM symbol_references
@@ -225,8 +225,8 @@ class CodeDB:
             self.connection.executemany(
                 """
                 INSERT INTO symbols
-                (id, file_id, parent_id, name, qualified_name, coalesced_name, kind, line_start, line_end, line_count, signature, docstring, modifiers, base_classes, language, is_test)
-                VALUES (:id, :file_id, :parent_id, :name, :qualified_name, :coalesced_name, :kind, :line_start, :line_end, :line_count, :signature, :docstring, :modifiers, :base_classes, :language, :is_test)
+                (id, file_id, parent_id, name, qualified_name, full_name, kind, line_start, line_end, line_count, signature, docstring, modifiers, base_classes, language, is_test)
+                VALUES (:id, :file_id, :parent_id, :name, :qualified_name, :full_name, :kind, :line_start, :line_end, :line_count, :signature, :docstring, :modifiers, :base_classes, :language, :is_test)
                 """,
                 symbols,
             )
@@ -234,8 +234,8 @@ class CodeDB:
             self.connection.executemany(
                 """
                 INSERT INTO symbol_references_staging
-                (id, ref_symbol_name, ref_symbol_qualified_name, ref_symbol_coalesced_name, source_file_id, source_line, ref_kind, context)
-                VALUES (:id, :ref_symbol_name, :ref_symbol_qualified_name, :ref_symbol_coalesced_name, :source_file_id, :source_line, :ref_kind, :context)
+                (id, ref_symbol_name, ref_symbol_qualified_name, ref_symbol_full_name, source_file_id, source_line, ref_kind, context)
+                VALUES (:id, :ref_symbol_name, :ref_symbol_qualified_name, :ref_symbol_full_name, :source_file_id, :source_line, :ref_kind, :context)
                 """,
                 symbol_references,
             )
@@ -253,21 +253,21 @@ class CodeDB:
         with self.connection:
             self.connection.execute("""
             INSERT INTO symbol_references
-            (id, ref_symbol_id, ref_symbol_file_id, ref_symbol_name, ref_symbol_qualified_name, ref_symbol_coalesced_name, source_file_id, source_line, ref_kind, context)
+            (id, ref_symbol_id, ref_symbol_file_id, ref_symbol_name, ref_symbol_qualified_name, ref_symbol_full_name, source_file_id, source_line, ref_kind, context)
             SELECT
             s.id,
             sy.id AS ref_symbol_id,
             sy.file_id AS ref_symbol_file_id,
             s.ref_symbol_name,
             s.ref_symbol_qualified_name,
-            s.ref_symbol_coalesced_name,
+            s.ref_symbol_full_name,
             s.source_file_id,
             s.source_line,
             s.ref_kind,
             s.context
             FROM symbol_references_staging AS s
             INNER JOIN symbols AS sy
-                ON s.ref_symbol_coalesced_name = sy.coalesced_name;
+                ON s.ref_symbol_full_name = sy.full_name;
             """)
             self.connection.execute("DELETE FROM symbol_references_staging;")
 
