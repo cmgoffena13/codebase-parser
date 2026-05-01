@@ -99,7 +99,7 @@ class CodeDB:
             self.connection.execute(
                 """
                 CREATE TEMP TABLE IF NOT EXISTS _directory_delta (
-                    id INTEGER PRIMARY KEY,
+                    id INTEGER NOT NULL,
                     file_count INTEGER NOT NULL,
                     total_lines INTEGER NOT NULL
                 )
