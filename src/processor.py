@@ -81,6 +81,24 @@ class CodeProcessor:
                 posix = posix[:-9]
         return posix
 
+    @staticmethod
+    def _directory_stats_delta(
+        directory_id: Optional[int],
+        had_existing_file_row: bool,
+        new_line_count: int,
+        old_line_count: int,
+    ) -> tuple[int, int]:
+        """Return (delta_file_count, delta_total_lines) for the parent directory row.
+
+        apply_directory_deltas() adds these to directories.file_count / total_lines.
+        Root-level files have no directory_id and contribute nothing.
+        """
+        if directory_id is None:
+            return 0, 0
+        if not had_existing_file_row:
+            return 1, new_line_count
+        return 0, new_line_count - old_line_count
+
     def _process_file(
         self, file_name: str, directory_path: Path, full: bool
     ) -> tuple[Optional[int], int, int]:
@@ -94,12 +112,15 @@ class CodeProcessor:
         else:
             directory_id = self.directories_snapshot[dir_path]["id"]
 
-        if file_relative_path in self.files_snapshot:
+        existed = file_relative_path in self.files_snapshot
+        if existed:
             file_id = self.files_snapshot[file_relative_path]["id"]
             prior_hash = self.files_snapshot[file_relative_path]["content_hash"]
+            prior_line_count = self.files_snapshot[file_relative_path]["line_count"]
         else:
             file_id = self.assigner.reserve("files", 1)[0]
             prior_hash = None
+            prior_line_count = 0
 
         try:
             file_bytes = file_path.read_bytes()
@@ -109,8 +130,9 @@ class CodeProcessor:
             self.files_skipped += 1
             return directory_id, 0, 0
 
-        file_count = 1
-        total_lines = line_count
+        delta_file_count, delta_total_lines = self._directory_stats_delta(
+            directory_id, existed, line_count, prior_line_count
+        )
 
         self.db_batches["files"].append(
             {
@@ -138,7 +160,7 @@ class CodeProcessor:
         ):
             if file_extension not in FILE_EXTENSION_MAPPING:
                 self.files_skipped += 1
-                return directory_id, file_count, total_lines
+                return directory_id, delta_file_count, delta_total_lines
 
             parser = ParserFactory.get_parser(
                 FILE_EXTENSION_MAPPING[file_extension], self.assigner, self.db
@@ -149,18 +171,18 @@ class CodeProcessor:
             self.db_batches["symbol_references"].extend(references)
             self.files_indexed += 1
             self._insert_batch()
-        return directory_id, file_count, total_lines
+        return directory_id, delta_file_count, delta_total_lines
 
     def _process_files(
         self, file_names: list[str], directory_path: Path, full: bool
     ) -> None:
         for file_name in file_names:
-            directory_id, file_count, total_lines = self._process_file(
+            directory_id, delta_file_count, delta_total_lines = self._process_file(
                 file_name, directory_path, full
             )
             if directory_id is not None:
-                self.directory_deltas[directory_id]["file_count"] += file_count
-                self.directory_deltas[directory_id]["total_lines"] += total_lines
+                self.directory_deltas[directory_id]["file_count"] += delta_file_count
+                self.directory_deltas[directory_id]["total_lines"] += delta_total_lines
 
     def _insert_batch(self, final: bool = False) -> None:
         if not final:

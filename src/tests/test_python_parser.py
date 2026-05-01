@@ -1,5 +1,4 @@
-def _index_by(items: list[dict], key: str) -> dict:
-    return {item[key]: item for item in items}
+import pytest
 
 
 def _symbol_key(symbol: dict) -> str:
@@ -21,13 +20,47 @@ def _assert_reference_shape(ref: dict, expected_file_id: int) -> None:
     assert isinstance(ref["context"], str) and ref["context"]
 
 
+def _assert_symbol_references_invariants(references: list[dict]) -> None:
+    """Every emitted reference must have a unique id and a unique logical key."""
+    ids = [r["id"] for r in references]
+    assert len(ids) == len(set(ids)), "symbol_references ids must be unique"
+
+    keys = {
+        (r["ref_symbol_full_name"], r["ref_kind"], r["source_line"]) for r in references
+    }
+    assert len(keys) == len(references), (
+        "symbol_references must be unique per (ref_symbol_full_name, ref_kind, source_line)"
+    )
+
+
+def _assert_symbols_invariants(symbols: list[dict]) -> None:
+    ids = [s["id"] for s in symbols]
+    assert len(ids) == len(set(ids)), "symbols ids must be unique"
+    names = [s["full_name"] for s in symbols]
+    assert len(names) == len(set(names)), "symbols full_name must be unique per file"
+
+
+def _assert_imports_invariants(imports: list[dict]) -> None:
+    ids = [i["id"] for i in imports]
+    assert len(ids) == len(set(ids)), "imports ids must be unique"
+    keys = {(i["import_path"], i["imported_symbol"]) for i in imports}
+    assert len(keys) == len(imports), (
+        "imports must be unique per (import_path, imported_symbol)"
+    )
+
+
 def test_python_fixture_file_parses_symbols_imports_and_references(
     python_parser, fixture_bytes
 ):
     file_bytes = fixture_bytes("file.py")
     symbols, imports, references = python_parser.parse(1, file_bytes)
 
-    assert symbols, "expected symbols from fixture file"
+    assert len(symbols) == 11
+    assert len(imports) == 3
+    assert len(references) == 6
+    _assert_symbols_invariants(symbols)
+    _assert_imports_invariants(imports)
+    _assert_symbol_references_invariants(references)
 
     qn = {_symbol_key(s) for s in symbols}
 
@@ -82,7 +115,6 @@ def test_python_fixture_file_parses_symbols_imports_and_references(
 
     # References: validate shape + expected signals
     assert isinstance(references, list)
-    assert references, "expected some symbol references"
     for r in references:
         _assert_reference_shape(r, expected_file_id=1)
 
@@ -106,6 +138,16 @@ def test_python_fixture_another_file_has_fakeclass_call_reference(
 ):
     file_bytes = fixture_bytes("another_file.py")
     symbols, imports, references = python_parser.parse(2, file_bytes)
+
+    assert len(symbols) == 4
+    assert len(imports) == 1
+    assert len(references) == 2
+    _assert_symbols_invariants(symbols)
+    _assert_imports_invariants(imports)
+    _assert_symbol_references_invariants(references)
+    for r in references:
+        _assert_reference_shape(r, expected_file_id=2)
+
     by_qn = _index_symbols(symbols)
 
     # Should contain a call reference to FakeClass()
@@ -122,7 +164,17 @@ def test_python_fixture_another_file_has_fakeclass_call_reference(
 
 def test_symbol_references_access_and_type_annotation(python_parser, fixture_bytes):
     file_bytes = fixture_bytes("references_cases.py")
-    symbols, _, references = python_parser.parse(4, file_bytes)
+    symbols, imports, references = python_parser.parse(4, file_bytes)
+
+    assert len(symbols) == 6
+    assert len(imports) == 1
+    assert len(references) == 7
+    _assert_symbols_invariants(symbols)
+    _assert_imports_invariants(imports)
+    _assert_symbol_references_invariants(references)
+    for r in references:
+        _assert_reference_shape(r, expected_file_id=4)
+
     by_qn = _index_symbols(symbols)
 
     assert "RefClass.value" in by_qn
@@ -145,7 +197,14 @@ def test_symbol_references_access_and_type_annotation(python_parser, fixture_byt
 
 def test_is_test_detection_pytest_and_unittest(python_parser, fixture_bytes):
     file_bytes = fixture_bytes("is_test_cases.py")
-    symbols, _, _ = python_parser.parse(3, file_bytes)
+    symbols, imports, references = python_parser.parse(3, file_bytes)
+
+    assert len(symbols) == 5
+    assert len(imports) == 1
+    assert len(references) == 0
+    _assert_symbols_invariants(symbols)
+    _assert_imports_invariants(imports)
+
     by_qn = _index_symbols(symbols)
 
     assert by_qn["test_top"]["is_test"] is True
@@ -159,7 +218,16 @@ def test_symbol_references_ids_are_unique_with_repeated_calls(
     python_parser, fixture_bytes
 ):
     file_bytes = fixture_bytes("duplicate_reference_ids.py")
-    _, _, references = python_parser.parse(5, file_bytes)
+    symbols, imports, references = python_parser.parse(5, file_bytes)
+
+    assert len(symbols) == 2
+    assert len(imports) == 0
+    assert len(references) == 2
+    _assert_symbols_invariants(symbols)
+    _assert_imports_invariants(imports)
+    _assert_symbol_references_invariants(references)
+    for r in references:
+        _assert_reference_shape(r, expected_file_id=5)
 
     call_refs = [
         r
@@ -169,5 +237,35 @@ def test_symbol_references_ids_are_unique_with_repeated_calls(
     assert len(call_refs) == 2
     assert {r["source_line"] for r in call_refs} == {6, 7}
 
-    ids = [r["id"] for r in references]
-    assert len(ids) == len(set(ids)), "expected unique symbol_reference ids"
+
+@pytest.mark.parametrize(
+    "fixture_name,file_id,expected_counts",
+    [
+        ("file.py", 1, (11, 3, 6)),
+        ("another_file.py", 2, (4, 1, 2)),
+        ("is_test_cases.py", 3, (5, 1, 0)),
+        ("references_cases.py", 4, (6, 1, 7)),
+        ("duplicate_reference_ids.py", 5, (2, 0, 2)),
+    ],
+)
+def test_parse_twice_counts_unchanged(
+    python_parser,
+    fixture_bytes,
+    fixture_name: str,
+    file_id: int,
+    expected_counts: tuple,
+):
+    """Second parse of the same bytes + file_id must yield the same cardinality."""
+    file_bytes = fixture_bytes(fixture_name)
+    first = python_parser.parse(file_id, file_bytes)
+    second = python_parser.parse(file_id, file_bytes)
+
+    assert tuple(len(x) for x in first) == expected_counts
+    assert tuple(len(x) for x in second) == expected_counts
+
+    for label, batch in (("first", first), ("second", second)):
+        symbols, imports, references = batch
+        _assert_symbols_invariants(symbols)
+        _assert_imports_invariants(imports)
+        if references:
+            _assert_symbol_references_invariants(references)

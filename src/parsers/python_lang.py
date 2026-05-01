@@ -64,6 +64,9 @@ class PythonParser(ParserBase):
         # We need to know the ID *before* recursing so children can use it as parent
         symbol_id = None
         qualified_name = None
+        pushed_stack = False
+        kind: str | None = None
+        is_test: bool = False
 
         if node.type in (
             "class_definition",
@@ -72,19 +75,52 @@ class PythonParser(ParserBase):
         ):
             # Extract symbol details first
             symbol_data = self._extract_symbol(node, file_id, file_bytes)
+            # Always push a stack frame for container defs when they exist in the DB
+            # snapshot (even if we don't emit an updated row), otherwise nested
+            # symbol/references lose parent context and churn ids across reparses.
             if symbol_data:
                 symbol_id = symbol_data["id"]
                 qualified_name = symbol_data["qualified_name"] or symbol_data["name"]
                 self.symbols.append(symbol_data)
-                # Push to stack
-                self.stack.append(
-                    (
-                        symbol_id,
-                        qualified_name,
-                        symbol_data["kind"],
-                        symbol_data.get("is_test", False),
+                kind = symbol_data["kind"]
+                is_test = symbol_data.get("is_test", False)
+            else:
+                name_node = node.child_by_field_name("name")
+                if name_node is not None and name_node.text is not None:
+                    name = name_node.text.decode("utf-8")
+                    if node.type == "class_definition":
+                        kind = "class"
+                    else:
+                        kind = (
+                            "method"
+                            if (self.stack and self.stack[-1][2] == "class")
+                            else "function"
+                        )
+                    if self.stack:
+                        parent_qn = self.stack[-1][1]
+                        qualified_name = f"{parent_qn}.{name}"
+                    else:
+                        qualified_name = name
+                    symbol_identity = (
+                        qualified_name if qualified_name is not None else name
                     )
-                )
+                    key = (symbol_identity, kind)
+                    if key in self.symbols_snapshot:
+                        symbol_id = self.symbols_snapshot[key]["id"]
+                        is_test = self.stack[-1][3] if self.stack else False
+                        if kind == "function" and name.startswith("test_"):
+                            is_test = True
+                        elif kind == "class" and name.startswith("Test"):
+                            is_test = True
+                        elif kind == "method" and name.startswith("test_") and is_test:
+                            is_test = True
+            if (
+                symbol_id is not None
+                and qualified_name is not None
+                and kind is not None
+            ):
+                self.stack.append((symbol_id, qualified_name, kind, is_test))
+                pushed_stack = True
         elif node.type in (
             "assignment",
             "annotated_assignment",
@@ -101,7 +137,7 @@ class PythonParser(ParserBase):
             self._walk(child, file_id, file_bytes)
 
         # 4. Pop from stack if we pushed
-        if symbol_id is not None:
+        if pushed_stack:
             self.stack.pop()
 
     def _extract_variable_symbols(
@@ -346,13 +382,15 @@ class PythonParser(ParserBase):
         key = (symbol_identity, kind)
         if key in self.symbols_snapshot:
             self.symbols_snapshot[key]["seen"] = True
-
-            # NOTE: if lines changed, we need to update the symbol so return
+            # Only emit a row when something relevant changed; unchanged symbols still
+            # need stack context, which is handled in _walk.
             if (line_start, line_end) != (
                 self.symbols_snapshot[key]["line_start"],
                 self.symbols_snapshot[key]["line_end"],
             ):
                 symbol_id = self.symbols_snapshot[key]["id"]
+                self.symbols_snapshot[key]["line_start"] = line_start
+                self.symbols_snapshot[key]["line_end"] = line_end
                 return {
                     "id": symbol_id,
                     "file_id": file_id,
@@ -371,8 +409,7 @@ class PythonParser(ParserBase):
                     "base_classes": str(base_classes) if base_classes else None,
                     "is_test": is_test,
                 }
-            else:
-                return None
+            return None
         else:
             symbol_id = self.assigner.reserve("symbols", 1)[0]
             self.symbols_snapshot[key] = {
@@ -649,7 +686,6 @@ class PythonParser(ParserBase):
 
         # If it's a simple name, we can't resolve it yet, so keep raw
         # But if it's "module.func", we keep "module.func"
-
         source_line = node.start_point.row + 1
         ref_symbol_full_name = (
             qualified_name if qualified_name is not None else target_name
