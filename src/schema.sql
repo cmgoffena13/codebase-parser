@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS symbols (
     line_start      INTEGER NOT NULL,                
     line_end        INTEGER NOT NULL,                
     line_count      INTEGER NOT NULL,               
-    signature       TEXT,                           
+    signature       TEXT NOT NULL,                           
     docstring       TEXT,                            
     modifiers       TEXT,                           
     base_classes    TEXT,                          
@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS symbol_references (
     source_file_id              INTEGER NOT NULL REFERENCES files(id), 
     source_line                 INTEGER NOT NULL,                
     ref_kind                    TEXT NOT NULL,                  
-    context                     TEXT                            
+    context                     TEXT NOT NULL                     
 );
 
 DROP TABLE IF EXISTS imports;
