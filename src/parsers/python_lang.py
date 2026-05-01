@@ -158,14 +158,19 @@ class PythonParser(ParserBase):
         if target is None:
             return symbols
 
+        # symbol_leaf is the stable suffix for qualified_name/full_name (e.g. "llm").
+        # name is the source spelling for the DB (e.g. "self.llm"), matching references.
+        symbol_leaf = ""
         name = ""
         if target.type == "identifier" and target.text is not None:
-            name = target.text.decode("utf-8")
+            decoded = target.text.decode("utf-8")
+            symbol_leaf = name = decoded
         elif target.type == "attribute" and target.text is not None:
             text = target.text.decode("utf-8")
             if text.startswith("self.") or text.startswith("cls."):
-                name = text.split(".", 1)[1]
-        if not name:
+                symbol_leaf = text.split(".", 1)[1]
+                name = text
+        if not symbol_leaf:
             return symbols
         line_start = node.start_point.row + 1
         line_end = node.end_point.row + 1
@@ -174,7 +179,7 @@ class PythonParser(ParserBase):
             parent_qn = self.stack[-1][1]
             if target.type == "attribute" and parent_qn.endswith(".__init__"):
                 parent_qn = parent_qn.rsplit(".", 1)[0]
-            qualified_name = f"{parent_qn}.{name}"
+            qualified_name = f"{parent_qn}.{symbol_leaf}"
             parent_id = self.stack[-1][0]
         else:
             qualified_name = None
