@@ -654,13 +654,35 @@ class PythonParser(ParserBase):
         ref_symbol_full_name = (
             qualified_name if qualified_name is not None else target_name
         )
-        key = (ref_symbol_full_name, ref_kind, source_line)
+        key = (ref_symbol_full_name, ref_kind)
+        context = node.text.decode("utf-8") if node.text is not None else ""
         if key in self.symbols_references_snapshot:
             self.symbols_references_snapshot[key]["seen"] = True
+            if (
+                self.symbols_references_snapshot[key]["context"] != context
+                or self.symbols_references_snapshot[key]["source_line"] != source_line
+            ):
+                symbol_reference_id = self.symbols_references_snapshot[key]["id"]
+                self.symbol_references.append(
+                    {
+                        "id": symbol_reference_id,
+                        "ref_symbol_name": target_name,
+                        "ref_symbol_qualified_name": qualified_name,
+                        "ref_symbol_full_name": ref_symbol_full_name,
+                        "source_file_id": file_id,
+                        "source_line": source_line,
+                        "ref_kind": ref_kind,
+                        "context": context,
+                    }
+                )
+                self.symbols_references_snapshot[key]["context"] = context
+                self.symbols_references_snapshot[key]["source_line"] = source_line
         else:
             symbol_reference_id = self.assigner.reserve("symbol_references", 1)[0]
             self.symbols_references_snapshot[key] = {
                 "id": symbol_reference_id,
+                "source_line": source_line,
+                "context": context,
                 "seen": True,
             }
             self.symbol_references.append(
@@ -672,9 +694,7 @@ class PythonParser(ParserBase):
                     "source_file_id": file_id,
                     "source_line": source_line,
                     "ref_kind": ref_kind,
-                    "context": (
-                        node.text.decode("utf-8") if node.text is not None else ""
-                    ),
+                    "context": context,
                 }
             )
         return

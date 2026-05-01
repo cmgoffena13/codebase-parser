@@ -121,27 +121,30 @@ class CodeDB:
 
     def get_symbol_references_snapshot(
         self, file_id: int
-    ) -> dict[tuple[str, str, int], dict[str, Any]]:
+    ) -> dict[tuple[str, str], dict[str, Any]]:
         query = """
         SELECT
         id,
         ref_symbol_full_name AS name,
         ref_kind,
-        source_line
+        source_line,
+        context
         FROM symbol_references
         WHERE source_file_id = ?
         """
         cursor = self.connection.execute(query, (file_id,))
         return {
-            (row["name"], row["ref_kind"], row["source_line"]): {
+            (row["name"], row["ref_kind"]): {
                 "id": row["id"],
+                "source_line": row["source_line"],
+                "context": row["context"],
                 "seen": False,
             }
             for row in cursor
         }
 
     def delete_symbol_references(
-        self, symbol_references_snapshot: dict[tuple[str, str, int], dict[str, Any]]
+        self, symbol_references_snapshot: dict[tuple[str, str], dict[str, Any]]
     ) -> None:
         symbol_reference_ids = [
             symbol_reference["id"]
@@ -223,7 +226,7 @@ class CodeDB:
 
             self.connection.executemany(
                 """
-                INSERT INTO imports
+                INSERT OR REPLACE INTO imports
                 (id, file_id, import_path, imported_symbol, alias, line_number, import_type, import_scope, signature)
                 VALUES (:id, :file_id, :import_path, :imported_symbol, :alias, :line_number, :import_type, :import_scope, :signature)
                 """,
