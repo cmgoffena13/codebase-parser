@@ -1,6 +1,7 @@
 import os
 import time
 from pathlib import Path
+from typing import Optional
 
 import xxhash
 
@@ -82,7 +83,7 @@ class CodeProcessor:
 
     def _process_file(
         self, file_name: str, directory_path: Path, full: bool
-    ) -> tuple[int | None, int, int]:
+    ) -> tuple[Optional[int], int, int]:
         file_path = directory_path / file_name
         file_relative_path = file_path.relative_to(self.root)
         file_last_modified = file_path.lstat().st_mtime
