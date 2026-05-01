@@ -629,4 +629,5 @@ class PythonParser(ParserBase):
                     ),
                 }
             )
+            self.symbols_references_snapshot[key]["seen"] = True
         return
