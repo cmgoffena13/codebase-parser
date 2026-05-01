@@ -71,11 +71,12 @@ class CodeDB:
 
     def get_files_snapshot(self) -> dict[Path, dict[str, Any]]:
         cursor = self.connection.execute(
-            "SELECT id, path, content_hash, line_count FROM files"
+            "SELECT id, directory_id, path, content_hash, line_count FROM files"
         )
         return {
             Path(row["path"]): {
                 "id": row["id"],
+                "directory_id": row["directory_id"],
                 "seen": False,
                 "content_hash": row["content_hash"],
                 "line_count": row["line_count"],
@@ -86,6 +87,37 @@ class CodeDB:
     def delete_files(self, files: dict[Path, dict[str, Any]]) -> None:
         file_ids = [file["id"] for file in files.values() if not file["seen"]]
         self.delete_ids("files", file_ids)
+
+    def apply_directory_deltas(self, deltas: dict[int, dict[str, int]]) -> None:
+        if not deltas:
+            return
+        rows = [
+            (id, dir["file_count"], dir["total_lines"]) for id, dir in deltas.items()
+        ]
+        with self.connection:
+            self.connection.execute("DROP TABLE IF EXISTS _directory_delta;")
+            self.connection.execute(
+                """
+                CREATE TEMP TABLE IF NOT EXISTS _directory_delta (
+                    id INTEGER PRIMARY KEY,
+                    file_count INTEGER NOT NULL,
+                    total_lines INTEGER NOT NULL
+                )
+                """
+            )
+            self.connection.executemany(
+                "INSERT INTO _directory_delta (id, file_count, total_lines) VALUES (?,?,?)",
+                rows,
+            )
+            self.connection.execute(
+                """
+                UPDATE directories AS d
+                SET file_count = d.file_count + s.file_count,
+                    total_lines = d.total_lines + s.total_lines
+                FROM _directory_delta AS s
+                WHERE d.id = s.id
+                """
+            )
 
     def get_symbols_snapshot(
         self, file_id: int

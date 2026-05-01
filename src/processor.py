@@ -1,4 +1,3 @@
-import json
 import os
 import time
 from pathlib import Path
@@ -30,6 +29,8 @@ class CodeProcessor:
         self.directories_snapshot = self.db.get_directories_snapshot()
         self.files_snapshot = self.db.get_files_snapshot()
 
+        self.directory_deltas: dict[int, dict[str, int]] = {}
+
     def _process_directories(
         self, directory_names: list[str], directory_path: Path
     ) -> None:
@@ -39,6 +40,11 @@ class CodeProcessor:
             )
             if directory_relative_path in self.directories_snapshot:
                 self.directories_snapshot[directory_relative_path]["seen"] = True
+                directory_id = self.directories_snapshot[directory_relative_path]["id"]
+                self.directory_deltas[directory_id] = {
+                    "file_count": 0,
+                    "total_lines": 0,
+                }
                 continue
 
             # NOTE: Assign a new ID for the directory.
@@ -61,6 +67,10 @@ class CodeProcessor:
                 "id": directory_id,
                 "seen": True,
             }
+            self.directory_deltas[directory_id] = {
+                "file_count": 0,
+                "total_lines": 0,
+            }
 
     def _normalize_path(self, path: Path, language: str = "python") -> str:
         posix = path.with_suffix("").as_posix().lower()
@@ -70,7 +80,9 @@ class CodeProcessor:
                 posix = posix[:-9]
         return posix
 
-    def _process_file(self, file_name: str, directory_path: Path, full: bool) -> None:
+    def _process_file(
+        self, file_name: str, directory_path: Path, full: bool
+    ) -> tuple[int | None, int, int]:
         file_path = directory_path / file_name
         file_relative_path = file_path.relative_to(self.root)
         file_last_modified = file_path.lstat().st_mtime
@@ -82,10 +94,11 @@ class CodeProcessor:
             directory_id = self.directories_snapshot[dir_path]["id"]
 
         if file_relative_path in self.files_snapshot:
-            self.files_snapshot[file_relative_path]["seen"] = True
             file_id = self.files_snapshot[file_relative_path]["id"]
+            prior_hash = self.files_snapshot[file_relative_path]["content_hash"]
         else:
             file_id = self.assigner.reserve("files", 1)[0]
+            prior_hash = None
 
         try:
             file_bytes = file_path.read_bytes()
@@ -93,7 +106,10 @@ class CodeProcessor:
             line_count = file_bytes.count(b"\n") + 1 if file_bytes else 0
         except OSError:
             self.files_skipped += 1
-            return
+            return directory_id, 0, 0
+
+        file_count = 1
+        total_lines = line_count
 
         self.db_batches["files"].append(
             {
@@ -109,6 +125,7 @@ class CodeProcessor:
         )
         self.files_snapshot[file_relative_path] = {
             "id": file_id,
+            "directory_id": directory_id,
             "seen": True,
             "content_hash": file_hash,
             "line_count": line_count,
@@ -116,12 +133,11 @@ class CodeProcessor:
 
         # NOTE: Two Gateway Checks for parsing: 1. Time 2. Content Hash.
         if full or (
-            file_last_modified > self.last_incremental
-            and file_hash != self.files_snapshot[file_relative_path]["content_hash"]
+            file_last_modified > self.last_incremental and file_hash != prior_hash
         ):
             if file_extension not in FILE_EXTENSION_MAPPING:
                 self.files_skipped += 1
-                return
+                return directory_id, file_count, total_lines
 
             parser = ParserFactory.get_parser(
                 FILE_EXTENSION_MAPPING[file_extension], self.assigner, self.db
@@ -132,16 +148,18 @@ class CodeProcessor:
             self.db_batches["symbol_references"].extend(references)
             self.files_indexed += 1
             self._insert_batch()
-        else:
-            return
+        return directory_id, file_count, total_lines
 
     def _process_files(
         self, file_names: list[str], directory_path: Path, full: bool
     ) -> None:
         for file_name in file_names:
-            self._process_file(file_name, directory_path, full)
-
-        self.db.delete_files(self.files_snapshot)
+            directory_id, file_count, total_lines = self._process_file(
+                file_name, directory_path, full
+            )
+            if directory_id is not None:
+                self.directory_deltas[directory_id]["file_count"] += file_count
+                self.directory_deltas[directory_id]["total_lines"] += total_lines
 
     def _insert_batch(self, final: bool = False) -> None:
         if not final:
@@ -158,6 +176,24 @@ class CodeProcessor:
     def _bulk_operations(self, now: int, last_incremental: int) -> None:
         self.db.resolve_symbol_references()
         self.db.resolve_imports(now, last_incremental)
+        self.db.apply_directory_deltas(self.directory_deltas)
+
+    def _apply_removal_directory_deltas(self) -> None:
+        for file in self.files_snapshot.values():
+            if file["seen"]:
+                continue
+            dir_id = file["directory_id"]
+            if dir_id is not None and dir_id in self.directory_deltas:
+                d = self.directory_deltas[dir_id]
+                d["file_count"] -= 1
+                d["total_lines"] -= file["line_count"]
+
+        for row in self.directories_snapshot.values():
+            if row["seen"]:
+                continue
+            dir_id = row["id"]
+            if dir_id in self.directory_deltas:
+                del self.directory_deltas[dir_id]
 
     def process(self, full: bool = False) -> None:
         now = int(time.time())
@@ -172,6 +208,8 @@ class CodeProcessor:
             self._process_directories(directory_names, directory_path)
             self._process_files(file_names, directory_path, full)
 
+        self._apply_removal_directory_deltas()
+        self.db.delete_files(self.files_snapshot)
         self.db.delete_directories(self.directories_snapshot)
 
         self._insert_batch(final=True)
