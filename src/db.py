@@ -138,11 +138,7 @@ class CodeDB:
         query = """
         SELECT
         id,
-        CASE 
-            WHEN ref_symbol_id IS NULL 
-            THEN ref_symbol_name 
-            ELSE ref_symbol_coalesced_name 
-        END AS name,
+        ref_symbol_coalesced_name AS name,
         ref_kind,
         source_line
         FROM symbol_references
@@ -238,8 +234,8 @@ class CodeDB:
             self.connection.executemany(
                 """
                 INSERT INTO symbol_references_staging
-                (ref_symbol_name, ref_symbol_qualified_name, ref_symbol_coalesced_name, source_file_id, source_line, ref_kind, context)
-                VALUES (:ref_symbol_name, :ref_symbol_qualified_name, :ref_symbol_coalesced_name, :source_file_id, :source_line, :ref_kind, :context)
+                (id, ref_symbol_name, ref_symbol_qualified_name, ref_symbol_coalesced_name, source_file_id, source_line, ref_kind, context)
+                VALUES (:id, :ref_symbol_name, :ref_symbol_qualified_name, :ref_symbol_coalesced_name, :source_file_id, :source_line, :ref_kind, :context)
                 """,
                 symbol_references,
             )
@@ -257,8 +253,9 @@ class CodeDB:
         with self.connection:
             self.connection.execute("""
             INSERT INTO symbol_references
-            (ref_symbol_id, ref_symbol_file_id, ref_symbol_name, ref_symbol_qualified_name, ref_symbol_coalesced_name, source_file_id, source_line, ref_kind, context)
+            (id, ref_symbol_id, ref_symbol_file_id, ref_symbol_name, ref_symbol_qualified_name, ref_symbol_coalesced_name, source_file_id, source_line, ref_kind, context)
             SELECT
+            s.id,
             sy.id AS ref_symbol_id,
             sy.file_id AS ref_symbol_file_id,
             s.ref_symbol_name,

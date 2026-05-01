@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS symbols (
 
 DROP TABLE IF EXISTS symbol_references_staging;
 CREATE TABLE IF NOT EXISTS symbol_references_staging (
+    id                          INTEGER NOT NULL,
     ref_symbol_name             TEXT NOT NULL,                 
     ref_symbol_qualified_name   TEXT NULL,
     ref_symbol_coalesced_name   TEXT NOT NULL,

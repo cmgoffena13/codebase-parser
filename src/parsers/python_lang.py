@@ -613,11 +613,17 @@ class PythonParser(ParserBase):
         if key in self.symbols_references_snapshot:
             self.symbols_references_snapshot[key]["seen"] = True
         else:
+            symbol_reference_id = self.assigner.reserve("symbol_references", 1)[0]
             ref_symbol_coalesced_name = (
                 qualified_name if qualified_name is not None else target_name
             )
+            self.symbols_references_snapshot[key] = {
+                "id": symbol_reference_id,
+                "seen": True,
+            }
             self.symbol_references_staging.append(
                 {
+                    "id": symbol_reference_id,
                     "ref_symbol_name": target_name,
                     "ref_symbol_qualified_name": qualified_name,
                     "ref_symbol_coalesced_name": ref_symbol_coalesced_name,
