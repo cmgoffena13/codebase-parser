@@ -1,7 +1,7 @@
 PRAGMA journal_mode=WAL;
 PRAGMA synchronous=NORMAL;
 
---DROP TABLE IF EXISTS watermarks; -- TODO: Remove this after testing.
+DROP TABLE IF EXISTS watermarks; -- TODO: Remove this after testing.
 CREATE TABLE IF NOT EXISTS watermarks (
     id                  INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
     last_full_parse     INTEGER NOT NULL DEFAULT 0,
@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS watermarks (
 );
 INSERT OR IGNORE INTO watermarks (id, last_full_parse, last_incremental) VALUES (1, 0, 0);
 
---DROP  TABLE IF EXISTS directories;
+DROP  TABLE IF EXISTS directories;
 CREATE TABLE IF NOT EXISTS directories (
     id              INTEGER NOT NULL PRIMARY KEY,
     parent_id       INTEGER REFERENCES directories(id),  
@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS directories (
     total_lines     INTEGER DEFAULT 0                  
 );
 
---DROP TABLE IF EXISTS files;
+DROP TABLE IF EXISTS files;
 CREATE TABLE IF NOT EXISTS files (
     id              INTEGER NOT NULL PRIMARY KEY,
     directory_id    INTEGER REFERENCES directories(id),
@@ -32,14 +32,14 @@ CREATE TABLE IF NOT EXISTS files (
     line_count      INTEGER NOT NULL DEFAULT 0                             
 );
 
---DROP TABLE IF EXISTS symbols;
+DROP TABLE IF EXISTS symbols;
 CREATE TABLE IF NOT EXISTS symbols (
     id              INTEGER NOT NULL PRIMARY KEY,
     file_id         INTEGER NOT NULL REFERENCES files(id),
     parent_id       INTEGER REFERENCES symbols(id), 
     name            TEXT NOT NULL,                  
     qualified_name  TEXT,   
-    full_name       TEXT NOT NULL,                        
+    full_name       TEXT UNIQUE NOT NULL,                        
     kind            TEXT NOT NULL,                  
     line_start      INTEGER NOT NULL,                
     line_end        INTEGER NOT NULL,                
@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS symbols (
 );
 CREATE INDEX IF NOT EXISTS symbols_file_id_index ON symbols (file_id);
 
---DROP TABLE IF EXISTS symbol_references_staging;
+DROP TABLE IF EXISTS symbol_references_staging;
 CREATE TABLE IF NOT EXISTS symbol_references_staging (
     id                          INTEGER NOT NULL,
     ref_symbol_name             TEXT NOT NULL,                 
@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS symbol_references_staging (
     context                     TEXT                             
 );
 
---DROP TABLE IF EXISTS symbol_references;
+DROP TABLE IF EXISTS symbol_references;
 CREATE TABLE IF NOT EXISTS symbol_references (
     id                          INTEGER NOT NULL PRIMARY KEY,
     ref_symbol_id               INTEGER NOT NULL REFERENCES symbols(id), 
@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS symbol_references (
 );
 CREATE INDEX IF NOT EXISTS symbol_references_source_file_id_index ON symbol_references (source_file_id);
 
---DROP TABLE IF EXISTS imports;
+DROP TABLE IF EXISTS imports;
 CREATE TABLE IF NOT EXISTS imports (
     id                    INTEGER NOT NULL PRIMARY KEY,
     file_id               INTEGER NOT NULL REFERENCES files(id),

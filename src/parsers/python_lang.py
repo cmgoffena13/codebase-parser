@@ -654,14 +654,11 @@ class PythonParser(ParserBase):
         ref_symbol_full_name = (
             qualified_name if qualified_name is not None else target_name
         )
-        key = (ref_symbol_full_name, ref_kind)
+        key = (ref_symbol_full_name, ref_kind, source_line)
         context = node.text.decode("utf-8") if node.text is not None else ""
         if key in self.symbols_references_snapshot:
             self.symbols_references_snapshot[key]["seen"] = True
-            if (
-                self.symbols_references_snapshot[key]["context"] != context
-                or self.symbols_references_snapshot[key]["source_line"] != source_line
-            ):
+            if self.symbols_references_snapshot[key]["context"] != context:
                 symbol_reference_id = self.symbols_references_snapshot[key]["id"]
                 self.symbol_references.append(
                     {
@@ -676,7 +673,6 @@ class PythonParser(ParserBase):
                     }
                 )
                 self.symbols_references_snapshot[key]["context"] = context
-                self.symbols_references_snapshot[key]["source_line"] = source_line
         else:
             symbol_reference_id = self.assigner.reserve("symbol_references", 1)[0]
             self.symbols_references_snapshot[key] = {

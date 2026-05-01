@@ -153,3 +153,21 @@ def test_is_test_detection_pytest_and_unittest(python_parser, fixture_bytes):
     assert by_qn["TestPy.test_m"]["is_test"] is True
     assert by_qn["UT"]["is_test"] is True
     assert by_qn["UT.test_u"]["is_test"] is True
+
+
+def test_symbol_references_ids_are_unique_with_repeated_calls(
+    python_parser, fixture_bytes
+):
+    file_bytes = fixture_bytes("duplicate_reference_ids.py")
+    _, _, references = python_parser.parse(5, file_bytes)
+
+    call_refs = [
+        r
+        for r in references
+        if r["ref_kind"] == "call" and r["ref_symbol_name"] == "callee"
+    ]
+    assert len(call_refs) == 2
+    assert {r["source_line"] for r in call_refs} == {6, 7}
+
+    ids = [r["id"] for r in references]
+    assert len(ids) == len(set(ids)), "expected unique symbol_reference ids"
