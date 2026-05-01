@@ -33,6 +33,13 @@ class CodeDB:
             self.connection.rollback()
             raise e
 
+    def delete_ids(self, table: str, ids: list[int]) -> None:
+        if not ids:
+            return
+        placeholders = ",".join(["?"] * len(ids))
+        query = f"DELETE FROM {table} WHERE id IN ({placeholders})"
+        self.exec_tran(query, tuple(ids))
+
     def exec_query(self, query: str) -> sqlite3.Row:
         row = self.connection.execute(query).fetchone()
         return row
@@ -60,9 +67,7 @@ class CodeDB:
 
     def delete_directories(self, directories: dict[Path, dict[str, Any]]) -> None:
         dir_ids = [dir["id"] for dir in directories.values() if not dir["seen"]]
-        if not dir_ids:
-            return
-        self.exec_tran("DELETE FROM directories WHERE id IN (?)", (dir_ids,))
+        self.delete_ids("directories", dir_ids)
 
     def get_files_snapshot(self) -> dict[Path, dict[str, Any]]:
         cursor = self.connection.execute(
@@ -80,10 +85,7 @@ class CodeDB:
 
     def delete_files(self, files: dict[Path, dict[str, Any]]) -> None:
         file_ids = [file["id"] for file in files.values() if not file["seen"]]
-        if not file_ids:
-            return
-
-        self.exec_tran("DELETE FROM files WHERE id IN (?)", (file_ids,))
+        self.delete_ids("files", file_ids)
 
     def get_symbols_snapshot(
         self, file_id: int
@@ -115,9 +117,7 @@ class CodeDB:
         symbol_ids = [
             symbol["id"] for symbol in symbols_snapshot.values() if not symbol["seen"]
         ]
-        if not symbol_ids:
-            return
-        self.exec_tran("DELETE FROM symbols WHERE id IN (?)", (symbol_ids,))
+        self.delete_ids("symbols", symbol_ids)
 
     def get_symbol_references_snapshot(
         self, file_id: int
@@ -148,11 +148,7 @@ class CodeDB:
             for symbol_reference in symbol_references_snapshot.values()
             if not symbol_reference["seen"]
         ]
-        if not symbol_reference_ids:
-            return
-        self.exec_tran(
-            "DELETE FROM symbol_references WHERE id IN (?)", (symbol_reference_ids,)
-        )
+        self.delete_ids("symbol_references", symbol_reference_ids)
 
     def get_imports_snapshot(
         self, file_id: int
@@ -161,7 +157,8 @@ class CodeDB:
         SELECT
         id,
         import_path,
-        imported_symbol
+        imported_symbol,
+        line_number
         FROM imports
         WHERE file_id = ?
         """
@@ -169,6 +166,7 @@ class CodeDB:
         return {
             (row["import_path"], row["imported_symbol"]): {
                 "id": row["id"],
+                "line_number": row["line_number"],
                 "seen": False,
             }
             for row in cursor
@@ -178,9 +176,7 @@ class CodeDB:
         self, imports_snapshot: dict[tuple[str, str], dict[str, Any]]
     ) -> None:
         import_ids = [i["id"] for i in imports_snapshot.values() if not i["seen"]]
-        if not import_ids:
-            return
-        self.exec_tran("DELETE FROM imports WHERE id IN (?)", (import_ids,))
+        self.delete_ids("imports", import_ids)
 
     def bulk_insert(self, db_batches: dict[str, list[dict[str, Any]]]) -> None:
         directories = db_batches["directories"]
@@ -200,7 +196,7 @@ class CodeDB:
 
             self.connection.executemany(
                 """
-                INSERT INTO files
+                INSERT OR REPLACE INTO files
                 (id, directory_id, name, path, normalized_path, language, content_hash, line_count)
                 VALUES (:id, :directory_id, :name, :path, :normalized_path, :language, :content_hash, :line_count)
                 """,
@@ -209,7 +205,7 @@ class CodeDB:
 
             self.connection.executemany(
                 """
-                INSERT INTO symbols
+                INSERT OR REPLACE INTO symbols
                 (id, file_id, parent_id, name, qualified_name, full_name, kind, line_start, line_end, line_count, signature, docstring, modifiers, base_classes, language, is_test)
                 VALUES (:id, :file_id, :parent_id, :name, :qualified_name, :full_name, :kind, :line_start, :line_end, :line_count, :signature, :docstring, :modifiers, :base_classes, :language, :is_test)
                 """,
@@ -252,7 +248,8 @@ class CodeDB:
             s.context
             FROM symbol_references_staging AS s
             INNER JOIN symbols AS sy
-                ON s.ref_symbol_full_name = sy.full_name;
+                ON s.ref_symbol_full_name = sy.full_name
+            WHERE NOT EXISTS (SELECT 1 FROM symbol_references AS sr WHERE sr.id = s.id);
             """)
             self.connection.execute("DELETE FROM symbol_references_staging;")
 
