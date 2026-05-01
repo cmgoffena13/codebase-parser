@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS symbols (
     language        TEXT NOT NULL,
     is_test         BOOLEAN NOT NULL DEFAULT FALSE               
 );
+CREATE INDEX IF NOT EXISTS symbols_file_id_index ON symbols (file_id);
 
 --DROP TABLE IF EXISTS symbol_references_staging;
 CREATE TABLE IF NOT EXISTS symbol_references_staging (
@@ -67,8 +68,8 @@ CREATE TABLE IF NOT EXISTS symbol_references_staging (
 --DROP TABLE IF EXISTS symbol_references;
 CREATE TABLE IF NOT EXISTS symbol_references (
     id                          INTEGER NOT NULL PRIMARY KEY,
-    ref_symbol_id               INTEGER REFERENCES symbols(id), 
-    ref_symbol_file_id          INTEGER REFERENCES files(id),
+    ref_symbol_id               INTEGER NOT NULL REFERENCES symbols(id), 
+    ref_symbol_file_id          INTEGER NOT NULL REFERENCES files(id),
     ref_symbol_name             TEXT NOT NULL,       
     ref_symbol_qualified_name   TEXT NULL,
     ref_symbol_full_name        TEXT NOT NULL,
@@ -77,6 +78,7 @@ CREATE TABLE IF NOT EXISTS symbol_references (
     ref_kind                    TEXT NOT NULL,                  
     context                     TEXT NOT NULL                     
 );
+CREATE INDEX IF NOT EXISTS symbol_references_source_file_id_index ON symbol_references (source_file_id);
 
 --DROP TABLE IF EXISTS imports;
 CREATE TABLE IF NOT EXISTS imports (
@@ -92,3 +94,4 @@ CREATE TABLE IF NOT EXISTS imports (
     imported_file_id      INTEGER REFERENCES files(id),
     watermark             INTEGER NOT NULL DEFAULT (strftime('%s','now'))
 );
+CREATE INDEX IF NOT EXISTS imports_file_id_index ON imports (file_id);
