@@ -47,6 +47,8 @@ def _db_counts(tmp: Path) -> dict:
 
 
 def _write_nested_fixture(tmp: Path) -> None:
+    # `path_spec_for_indexing` requires a root `.gitignore` to exist.
+    (tmp / ".gitignore").write_text("# test fixture\n", encoding="utf-8")
     pkg = tmp / "pkg"
     pkg.mkdir(parents=True, exist_ok=True)
     (pkg / "mod.py").write_text(NESTED_PKG_MOD, encoding="utf-8")

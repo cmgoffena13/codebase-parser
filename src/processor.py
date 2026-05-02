@@ -7,7 +7,7 @@ import xxhash
 
 from src.assigner import GlobalIDAssigner
 from src.db import TABLE_BATCH_MAP, CodeDB
-from src.git_utils import GIT_IGNORE_LIST  # NOTE: placeholder for now
+from src.git_utils import path_spec_for_indexing, relative_path_is_ignored
 from src.parsers.factory import FILE_EXTENSION_MAPPING, ParserFactory
 
 
@@ -15,10 +15,9 @@ class CodeProcessor:
     def __init__(self, db: CodeDB, root: Path):
         self.db = db
         self.assigner = GlobalIDAssigner(db)
-        self.root = root
+        self.root = root.resolve()
+        self._index_ignore_spec = path_spec_for_indexing(self.root)
         self.last_full_parse, self.last_incremental = self.db.get_watermark()
-        self.ignore_names: set[str] = GIT_IGNORE_LIST
-
         self.db_batch_size = 1000
         self.db_batches: dict[str, list[dict]] = dict()
         for table in TABLE_BATCH_MAP:
@@ -222,12 +221,26 @@ class CodeProcessor:
         start_epoch = int(time.time())
         start_time = time.time()
         for directory_path, directory_names, file_names in os.walk(self.root):
-            directory_names[:] = [
-                d for d in directory_names if d not in self.ignore_names
-            ]
-            file_names[:] = [f for f in file_names if f not in self.ignore_names]
-
             directory_path = Path(directory_path)
+            directory_names[:] = [
+                dir
+                for dir in directory_names
+                if not relative_path_is_ignored(
+                    (directory_path / dir).relative_to(self.root),
+                    is_directory=True,
+                    spec=self._index_ignore_spec,
+                )
+            ]
+            file_names[:] = [
+                file
+                for file in file_names
+                if not relative_path_is_ignored(
+                    (directory_path / file).relative_to(self.root),
+                    is_directory=False,
+                    spec=self._index_ignore_spec,
+                )
+            ]
+
             self._process_directories(directory_names, directory_path)
             self._process_files(file_names, directory_path, full)
 
