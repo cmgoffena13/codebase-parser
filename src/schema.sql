@@ -8,6 +8,8 @@ PRAGMA synchronous=NORMAL;
 -- DROP TABLE IF EXISTS symbol_references_staging;
 -- DROP TABLE IF EXISTS symbol_references;
 -- DROP TABLE IF EXISTS imports;
+-- DROP TABLE IF EXISTS symbols_fts;
+-- DROP TABLE IF NOT EXISTS symbol_references_fts;
 
 CREATE TABLE IF NOT EXISTS watermarks (
     id                  INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
@@ -96,3 +98,20 @@ CREATE TABLE IF NOT EXISTS imports (
     watermark             INTEGER NOT NULL DEFAULT (strftime('%s','now'))
 );
 CREATE INDEX IF NOT EXISTS imports_file_id_index ON imports (file_id);
+
+
+/* NOTE: Full Text Search "Tables" for symbols and symbol_references. */
+CREATE VIRTUAL TABLE IF NOT EXISTS symbols_fts USING fts5(
+    full_name,
+    docstring,
+    signature,
+    content='symbols',
+    content_rowid='id'
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS symbol_references_fts USING fts5(
+    ref_symbol_full_name,
+    context,
+    content='symbol_references',
+    content_rowid='id'
+);
