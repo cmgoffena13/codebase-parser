@@ -149,7 +149,18 @@ class CodeDB:
         symbol_ids = [
             symbol["id"] for symbol in symbols_snapshot.values() if not symbol["seen"]
         ]
-        self.delete_ids("symbols", symbol_ids)
+        if not symbol_ids:
+            return
+        with self.connection:
+            ids_statement = ",".join(["?"] * len(symbol_ids))
+            self.connection.execute(
+                f"""DELETE FROM symbols WHERE id IN {ids_statement}""",
+                symbol_ids,
+            )
+            self.connection.execute(
+                f"""DELETE FROM symbols_fts WHERE rowid IN {ids_statement}""",
+                symbol_ids,
+            )
 
     def get_symbol_references_snapshot(
         self, file_id: int
@@ -183,7 +194,18 @@ class CodeDB:
             for symbol_reference in symbol_references_snapshot.values()
             if not symbol_reference["seen"]
         ]
-        self.delete_ids("symbol_references", symbol_reference_ids)
+        if not symbol_reference_ids:
+            return
+        with self.connection:
+            ids_statement = ",".join(["?"] * len(symbol_reference_ids))
+            self.connection.execute(
+                f"""DELETE FROM symbol_references WHERE id IN {ids_statement}""",
+                symbol_reference_ids,
+            )
+            self.connection.execute(
+                f"""DELETE FROM symbol_references_fts WHERE rowid IN {ids_statement}""",
+                symbol_reference_ids,
+            )
 
     def get_imports_snapshot(
         self, file_id: int
@@ -245,6 +267,24 @@ class CodeDB:
                 VALUES (:id, :file_id, :parent_id, :name, :qualified_name, :full_name, :kind, :line_start, :line_end, :line_count, :signature, :docstring, :modifiers, :base_classes, :language, :is_test)
                 """,
                 symbols,
+            )
+            symbol_ids = [s["id"] for s in symbols]
+            if symbol_ids:
+                placeholders = ",".join("?" * len(symbol_ids))
+                self.connection.execute(
+                    f"DELETE FROM symbols_fts WHERE rowid IN ({placeholders})",
+                    symbol_ids,
+                )
+            fts_symbols = [
+                (s["id"], s["full_name"], s["signature"], s["docstring"])
+                for s in symbols
+            ]
+            self.connection.executemany(
+                """
+                INSERT INTO symbols_fts(rowid, full_name, signature, docstring)
+                VALUES (?, ?, ?, ?)
+                """,
+                fts_symbols,
             )
 
             self.connection.executemany(
