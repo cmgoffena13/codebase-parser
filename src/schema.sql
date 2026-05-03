@@ -99,18 +99,11 @@ CREATE TABLE IF NOT EXISTS imports (
 CREATE INDEX IF NOT EXISTS imports_file_id_index ON imports (file_id);
 
 
-/* NOTE: Full Text Search "Tables" for symbols and symbol_references. */
+/* NOTE: Full Text Search "Tables" for symbols */
 CREATE VIRTUAL TABLE IF NOT EXISTS symbols_fts USING fts5(
     full_name,
     docstring,
     signature,
     content='symbols',
-    content_rowid='id'
-);
-
-CREATE VIRTUAL TABLE IF NOT EXISTS symbol_references_fts USING fts5(
-    ref_symbol_full_name,
-    context,
-    content='symbol_references',
     content_rowid='id'
 );

@@ -164,18 +164,7 @@ class CodeDB:
             for symbol_reference in symbol_references_snapshot.values()
             if not symbol_reference["seen"]
         ]
-        if not symbol_reference_ids:
-            return
-        with self.connection:
-            ids_placeholder = ",".join(["?"] * len(symbol_reference_ids))
-            self.connection.execute(
-                f"""DELETE FROM symbol_references WHERE id IN ({ids_placeholder})""",
-                symbol_reference_ids,
-            )
-            self.connection.execute(
-                f"""DELETE FROM symbol_references_fts WHERE rowid IN ({ids_placeholder})""",
-                symbol_reference_ids,
-            )
+        self.delete_ids("imports", symbol_reference_ids)
 
     def get_imports_snapshot(
         self, file_id: int

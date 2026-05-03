@@ -119,7 +119,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS symbols_fts USING fts5(
     content='symbols',
     content_rowid='id'
 );
-
 CREATE VIRTUAL TABLE IF NOT EXISTS symbol_references_fts USING fts5(
     ref_symbol_name,  
     ref_symbol_qualified_name,
