@@ -16,9 +16,7 @@ CREATE TABLE IF NOT EXISTS directories (
     parent_id       INTEGER REFERENCES directories(id),  -- null = root
     name            TEXT NOT NULL,                      -- "auth"
     path            TEXT UNIQUE NOT NULL,                -- "/src/auth"
-    depth           INTEGER NOT NULL,                    -- 0 = root, 1 = src, etc.
-    file_count      INTEGER DEFAULT 0,                   -- aggregated from files
-    total_lines     INTEGER DEFAULT 0,                   -- aggregated from files
+    depth           INTEGER NOT NULL                    -- 0 = root, 1 = src, etc.
 );
 
 -- To easily find all files under a directory without recursion.

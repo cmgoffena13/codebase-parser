@@ -100,7 +100,7 @@ How do we maintain a repo structure of the codebase?
         - id - to reuse
         - path - lookup key
         - content_hash - to detect content changes
-        - line_count - used for delta calculations to adjust directory total_lines
+        - line_count - stored per file row (e.g. display, tree rendering)
 
 How do we maintain the symbols, imports, and references of a file?
 - Before we parse a file, query for the last snapshot of the symbols using file path.

@@ -1,7 +1,6 @@
 import os
 import time
 from pathlib import Path
-from typing import Optional
 
 import xxhash
 
@@ -29,8 +28,6 @@ class CodeProcessor:
         self.directories_snapshot = self.db.get_directories_snapshot()
         self.files_snapshot = self.db.get_files_snapshot()
 
-        self.directory_deltas: dict[int, dict[str, int]] = {}
-
     def _process_directories(
         self, directory_names: list[str], directory_path: Path
     ) -> None:
@@ -40,11 +37,6 @@ class CodeProcessor:
             )
             if directory_relative_path in self.directories_snapshot:
                 self.directories_snapshot[directory_relative_path]["seen"] = True
-                directory_id = self.directories_snapshot[directory_relative_path]["id"]
-                self.directory_deltas[directory_id] = {
-                    "file_count": 0,
-                    "total_lines": 0,
-                }
                 continue
 
             # NOTE: Assign a new ID for the directory.
@@ -59,17 +51,11 @@ class CodeProcessor:
                     "name": directory_name,
                     "path": str(directory_relative_path),
                     "depth": depth,
-                    "file_count": 0,
-                    "total_lines": 0,
                 }
             )
             self.directories_snapshot[directory_relative_path] = {
                 "id": directory_id,
                 "seen": True,
-            }
-            self.directory_deltas[directory_id] = {
-                "file_count": 0,
-                "total_lines": 0,
             }
 
     def _normalize_path(self, path: Path, language: str = "python") -> str:
@@ -80,27 +66,7 @@ class CodeProcessor:
                 posix = posix[:-9]
         return posix
 
-    @staticmethod
-    def _directory_stats_delta(
-        directory_id: Optional[int],
-        had_existing_file_row: bool,
-        new_line_count: int,
-        old_line_count: int,
-    ) -> tuple[int, int]:
-        """Return (delta_file_count, delta_total_lines) for the parent directory row.
-
-        apply_directory_deltas() adds these to directories.file_count / total_lines.
-        Root-level files have no directory_id and contribute nothing.
-        """
-        if directory_id is None:
-            return 0, 0
-        if not had_existing_file_row:
-            return 1, new_line_count
-        return 0, new_line_count - old_line_count
-
-    def _process_file(
-        self, file_name: str, directory_path: Path, full: bool
-    ) -> tuple[Optional[int], int, int]:
+    def _process_file(self, file_name: str, directory_path: Path, full: bool) -> None:
         file_path = directory_path / file_name
         file_relative_path = file_path.relative_to(self.root)
         file_last_modified = file_path.lstat().st_mtime
@@ -115,11 +81,9 @@ class CodeProcessor:
         if existed:
             file_id = self.files_snapshot[file_relative_path]["id"]
             prior_hash = self.files_snapshot[file_relative_path]["content_hash"]
-            prior_line_count = self.files_snapshot[file_relative_path]["line_count"]
         else:
             file_id = self.assigner.reserve("files", 1)[0]
             prior_hash = None
-            prior_line_count = 0
 
         try:
             file_bytes = file_path.read_bytes()
@@ -127,11 +91,7 @@ class CodeProcessor:
             line_count = file_bytes.count(b"\n") + 1 if file_bytes else 0
         except OSError:
             self.files_skipped += 1
-            return directory_id, 0, 0
-
-        delta_file_count, delta_total_lines = self._directory_stats_delta(
-            directory_id, existed, line_count, prior_line_count
-        )
+            return
 
         self.db_batches["files"].append(
             {
@@ -159,7 +119,7 @@ class CodeProcessor:
         ):
             if file_extension not in FILE_EXTENSION_MAPPING:
                 self.files_skipped += 1
-                return directory_id, delta_file_count, delta_total_lines
+                return
 
             parser = ParserFactory.get_parser(
                 FILE_EXTENSION_MAPPING[file_extension], self.assigner, self.db
@@ -170,18 +130,12 @@ class CodeProcessor:
             self.db_batches["symbol_references"].extend(references)
             self.files_indexed += 1
             self._insert_batch()
-        return directory_id, delta_file_count, delta_total_lines
 
     def _process_files(
         self, file_names: list[str], directory_path: Path, full: bool
     ) -> None:
         for file_name in file_names:
-            directory_id, delta_file_count, delta_total_lines = self._process_file(
-                file_name, directory_path, full
-            )
-            if directory_id is not None:
-                self.directory_deltas[directory_id]["file_count"] += delta_file_count
-                self.directory_deltas[directory_id]["total_lines"] += delta_total_lines
+            self._process_file(file_name, directory_path, full)
 
     def _insert_batch(self, final: bool = False) -> None:
         if not final:
@@ -198,24 +152,6 @@ class CodeProcessor:
     def _bulk_operations(self, now: int, last_incremental: int) -> None:
         self.db.resolve_symbol_references()
         self.db.resolve_imports(now, last_incremental)
-        self.db.apply_directory_deltas(self.directory_deltas)
-
-    def _apply_removal_directory_deltas(self) -> None:
-        for file in self.files_snapshot.values():
-            if file["seen"]:
-                continue
-            dir_id = file["directory_id"]
-            if dir_id is not None and dir_id in self.directory_deltas:
-                d = self.directory_deltas[dir_id]
-                d["file_count"] -= 1
-                d["total_lines"] -= file["line_count"]
-
-        for row in self.directories_snapshot.values():
-            if row["seen"]:
-                continue
-            dir_id = row["id"]
-            if dir_id in self.directory_deltas:
-                del self.directory_deltas[dir_id]
 
     def process(self, full: bool = False) -> None:
         start_epoch = int(time.time())
@@ -244,7 +180,6 @@ class CodeProcessor:
             self._process_directories(directory_names, directory_path)
             self._process_files(file_names, directory_path, full)
 
-        self._apply_removal_directory_deltas()
         self.db.delete_files(self.files_snapshot)
         self.db.delete_directories(self.directories_snapshot)
 

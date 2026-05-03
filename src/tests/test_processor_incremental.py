@@ -26,11 +26,9 @@ def _db_counts(tmp: Path) -> dict:
     conn = sqlite3.connect(str(db_file))
     conn.row_factory = sqlite3.Row
     try:
-        dirs = conn.execute(
-            "SELECT id, file_count, total_lines FROM directories ORDER BY id"
-        ).fetchall()
+        dirs = conn.execute("SELECT id, path FROM directories ORDER BY id").fetchall()
         return {
-            "directories": [(r["id"], r["file_count"], r["total_lines"]) for r in dirs],
+            "directories": [(r["id"], r["path"]) for r in dirs],
             "files": conn.execute("SELECT COUNT(*) AS c FROM files").fetchone()["c"],
             "symbols": conn.execute("SELECT COUNT(*) AS c FROM symbols").fetchone()[
                 "c"

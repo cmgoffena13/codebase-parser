@@ -88,37 +88,6 @@ class CodeDB:
         file_ids = [file["id"] for file in files.values() if not file["seen"]]
         self.delete_ids("files", file_ids)
 
-    def apply_directory_deltas(self, deltas: dict[int, dict[str, int]]) -> None:
-        if not deltas:
-            return
-        rows = [
-            (id, dir["file_count"], dir["total_lines"]) for id, dir in deltas.items()
-        ]
-        with self.connection:
-            self.connection.execute("DROP TABLE IF EXISTS _directory_delta;")
-            self.connection.execute(
-                """
-                CREATE TEMP TABLE IF NOT EXISTS _directory_delta (
-                    id INTEGER NOT NULL,
-                    file_count INTEGER NOT NULL,
-                    total_lines INTEGER NOT NULL
-                )
-                """
-            )
-            self.connection.executemany(
-                "INSERT INTO _directory_delta (id, file_count, total_lines) VALUES (?,?,?)",
-                rows,
-            )
-            self.connection.execute(
-                """
-                UPDATE directories AS d
-                SET file_count = d.file_count + s.file_count,
-                    total_lines = d.total_lines + s.total_lines
-                FROM _directory_delta AS s
-                WHERE d.id = s.id
-                """
-            )
-
     def get_symbols_snapshot(
         self, file_id: int
     ) -> dict[tuple[str, str], dict[str, Any]]:
@@ -245,8 +214,8 @@ class CodeDB:
             self.connection.executemany(
                 """
                 INSERT INTO directories
-                (id, parent_id, name, path, depth, file_count, total_lines)
-                VALUES (:id, :parent_id, :name, :path, :depth, :file_count, :total_lines)
+                (id, parent_id, name, path, depth)
+                VALUES (:id, :parent_id, :name, :path, :depth)
                 """,
                 directories,
             )
