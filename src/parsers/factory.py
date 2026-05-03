@@ -14,10 +14,10 @@ class ParserFactory:
     tree_sitter_parsers = {
         "python": Parser(Language(python_language.language())),
     }
-    active_tree_sitter_parsers = {}
     parsers = {
         "python": PythonParser,
     }
+    active_tree_sitter_parsers = {}
 
     @classmethod
     def get_parser(
