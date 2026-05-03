@@ -17,6 +17,9 @@ WHERE file_id = ?
 ORDER BY line_number
 """
 
+_MAX_SIGNATURE_LINES = 200
+_MAX_DOCSTRING_CHARS = 100
+
 
 def _line_span(line_start: int, line_end: int) -> str:
     if line_start == line_end:
@@ -30,14 +33,20 @@ def _format_sig_doc(detail_prefix: str, row) -> list[str]:
     sig = (row["signature"] or "").strip()
     if sig:
         sig_parts = sig.splitlines()
+        total_sig_lines = len(sig_parts)
+        if total_sig_lines > _MAX_SIGNATURE_LINES:
+            sig_parts = sig_parts[:_MAX_SIGNATURE_LINES]
         lines.append(f"{detail_prefix}Sig: {sig_parts[0]}")
         for extra in sig_parts[1:]:
             lines.append(f"{detail_prefix}    {extra}")
+        if total_sig_lines > _MAX_SIGNATURE_LINES:
+            omitted = total_sig_lines - _MAX_SIGNATURE_LINES
+            lines.append(f"{detail_prefix}    ... ({omitted} lines omitted)")
     doc_raw = (row["docstring"] or "").strip()
     if doc_raw:
         first = doc_raw.splitlines()[0].strip()
-        if len(first) > 100:
-            first = first[:97] + "..."
+        if len(first) > _MAX_DOCSTRING_CHARS:
+            first = first[: _MAX_DOCSTRING_CHARS - 3] + "..."
         escaped = first.replace("\\", "\\\\").replace('"', '\\"')
         lines.append(f'{detail_prefix}Doc: "{escaped}"')
     return lines

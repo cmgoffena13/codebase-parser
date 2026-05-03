@@ -21,6 +21,9 @@ ORDER BY rank
 LIMIT ?
 """
 
+_MAX_SIGNATURE_LINES = 200
+_MAX_DOCSTRING_CHARS = 100
+
 
 def _line_span(line_start: int, line_end: int) -> str:
     if line_start == line_end:
@@ -38,8 +41,8 @@ def build_fts_query(user_input: str) -> str:
 
 def _truncate_doc(doc: str) -> str:
     doc = doc.replace("\n", " ").strip()
-    if len(doc) > 100:
-        return doc[:97] + "..."
+    if len(doc) > _MAX_DOCSTRING_CHARS:
+        return doc[: _MAX_DOCSTRING_CHARS - 3] + "..."
     return doc
 
 
@@ -48,9 +51,16 @@ def _sig_doc_lines(detail_prefix: str, sig: str, doc: str) -> list[str]:
     sig = sig.strip()
     if sig:
         parts = sig.splitlines()
+        total = len(parts)
+        if total > _MAX_SIGNATURE_LINES:
+            parts = parts[:_MAX_SIGNATURE_LINES]
         lines.append(f"{detail_prefix}Sig: {parts[0]}")
         for extra in parts[1:]:
             lines.append(f"{detail_prefix}    {extra}")
+        if total > _MAX_SIGNATURE_LINES:
+            lines.append(
+                f"{detail_prefix}    ... ({total - _MAX_SIGNATURE_LINES} lines omitted)"
+            )
     if doc:
         escaped = doc.replace("\\", "\\\\").replace('"', '\\"')
         lines.append(f'{detail_prefix}Doc: "{escaped}"')
