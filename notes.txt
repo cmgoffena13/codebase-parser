@@ -14,3 +14,12 @@ Functionality:
 4. `get_file_symbols(file_path)`
     a. Lists symbols and the signatures in the file
     b. Include imports so its clear whats used in the file
+
+Get Context:
+1. Symbol, Kind, File, Lines
+2. Show Symbol Code:
+    a. Includes Modifiers, Signature, Docstring, Base Class
+3. Show References:
+    a. File name
+    b. Line Number
+    c. Context
