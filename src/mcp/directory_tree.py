@@ -46,4 +46,4 @@ def get_directory_tree(db: CodeDB) -> str:
     body_lines = _lines_under_parent(children_by_parent_id, None, "")
     if not body_lines:
         return "."
-    return "Legend: L = Lines, S = Symbols\n" + ".\n" + "\n".join(body_lines)
+    return "Legend: L = Lines, S = Symbols\n\n" + ".\n" + "\n".join(body_lines)
