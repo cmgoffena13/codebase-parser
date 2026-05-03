@@ -36,8 +36,8 @@ def _format_sig_doc(detail_prefix: str, row) -> list[str]:
     doc_raw = (row["docstring"] or "").strip()
     if doc_raw:
         first = doc_raw.splitlines()[0].strip()
-        if len(first) > 50:
-            first = first[:47] + "..."
+        if len(first) > 100:
+            first = first[:97] + "..."
         escaped = first.replace("\\", "\\\\").replace('"', '\\"')
         lines.append(f'{detail_prefix}Doc: "{escaped}"')
     return lines
