@@ -14,8 +14,8 @@ SELECT
     s.line_end,
     bm25(symbols_fts) AS rank
 FROM symbols_fts
-JOIN symbols AS s ON s.id = symbols_fts.rowid
-JOIN files AS f ON f.id = s.file_id
+INNER JOIN symbols AS s ON s.id = symbols_fts.rowid
+INNER JOIN files AS f ON f.id = s.file_id
 WHERE symbols_fts MATCH ?
 ORDER BY rank
 LIMIT ?

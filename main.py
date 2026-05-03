@@ -18,7 +18,7 @@ def main():
     print("--------------------------------")
     print(get_file_overview(db, "src/internal/memory_utils.py"))
     print("--------------------------------")
-    print(search_symbols(db, "Parser"))
+    print(search_symbols(db, "memory"))
 
 
 if __name__ == "__main__":
