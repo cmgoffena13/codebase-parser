@@ -152,13 +152,13 @@ class CodeDB:
         if not symbol_ids:
             return
         with self.connection:
-            ids_statement = ",".join(["?"] * len(symbol_ids))
+            ids_placeholder = ",".join(["?"] * len(symbol_ids))
             self.connection.execute(
-                f"""DELETE FROM symbols WHERE id IN {ids_statement}""",
+                f"""DELETE FROM symbols WHERE id IN ({ids_placeholder})""",
                 symbol_ids,
             )
             self.connection.execute(
-                f"""DELETE FROM symbols_fts WHERE rowid IN {ids_statement}""",
+                f"""DELETE FROM symbols_fts WHERE rowid IN ({ids_placeholder})""",
                 symbol_ids,
             )
 
@@ -197,13 +197,13 @@ class CodeDB:
         if not symbol_reference_ids:
             return
         with self.connection:
-            ids_statement = ",".join(["?"] * len(symbol_reference_ids))
+            ids_placeholder = ",".join(["?"] * len(symbol_reference_ids))
             self.connection.execute(
-                f"""DELETE FROM symbol_references WHERE id IN {ids_statement}""",
+                f"""DELETE FROM symbol_references WHERE id IN ({ids_placeholder})""",
                 symbol_reference_ids,
             )
             self.connection.execute(
-                f"""DELETE FROM symbol_references_fts WHERE rowid IN {ids_statement}""",
+                f"""DELETE FROM symbol_references_fts WHERE rowid IN ({ids_placeholder})""",
                 symbol_reference_ids,
             )
 
@@ -268,20 +268,14 @@ class CodeDB:
                 """,
                 symbols,
             )
-            symbol_ids = [s["id"] for s in symbols]
-            if symbol_ids:
-                placeholders = ",".join("?" * len(symbol_ids))
-                self.connection.execute(
-                    f"DELETE FROM symbols_fts WHERE rowid IN ({placeholders})",
-                    symbol_ids,
-                )
+
             fts_symbols = [
-                (s["id"], s["full_name"], s["signature"], s["docstring"])
+                (s["id"], s["full_name"], s["docstring"], s["signature"])
                 for s in symbols
             ]
             self.connection.executemany(
                 """
-                INSERT INTO symbols_fts(rowid, full_name, signature, docstring)
+                INSERT OR REPLACE INTO symbols_fts (rowid, full_name, docstring, signature)
                 VALUES (?, ?, ?, ?)
                 """,
                 fts_symbols,

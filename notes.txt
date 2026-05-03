@@ -1,0 +1,20 @@
+Need to add:
+- `symbol_count` to Files
+
+Possibly can remove:
+- Directories: the `file_count` and `total_lines` columns. Maybe `depth` too.
+- Symbols: `name` and `qualified_name` -- probably just` qualified_name
+- Symbol References: `ref_symbol_name` and `ref_symbol_qualified_name` -- probably just` qualified_name
+    - Might just drop the FTS for this as well.
+
+Functionality:
+1. `get_context(full_symbol_name)`
+    a. Find the symbol, then read the file from start to end line to show the whole symbol. Show the file its in.
+    b. Find symbol references and show the top 50. Can get file name here as well.
+2. `search_symbol("search_term")`
+    a. Use FTS, will search symbol names, docstrings, and the API interface (signature)
+3. `project_map`
+    a. Will show the directory structure, the files and the line_counts for the files.
+4. `get_file_symbols(file_path)`
+    a. Lists symbols and the signatures in the file
+    b. Include imports so its clear whats used in the file

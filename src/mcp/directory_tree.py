@@ -32,7 +32,7 @@ def _lines_under_parent(children_by_parent_id, parent_key, branch_prefix):
     return lines
 
 
-def directory_tree(db: CodeDB) -> str:
+def get_directory_tree(db: CodeDB) -> str:
     children_by_parent_id = defaultdict(list)
     for row in db.connection.execute(_TREE_SQL):
         is_directory = row["row_type"] == "directory"
