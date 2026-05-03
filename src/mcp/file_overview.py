@@ -94,7 +94,7 @@ def get_file_overview(db: CodeDB, file_path: str) -> str:
     lines_out: list[str] = [
         "Legend: L = Line, Sig = Signature, Doc = Docstring\n",
         f"File: {file_row['path']}",
-        f"Language: {file_row['language'] or '—'}\nLines (indexed): {file_row['line_count']}",
+        f"Language: {file_row['language'] or '—'}\nLines: {file_row['line_count']}",
         "",
         f"## Imports ({len(imp_rows)})",
     ]

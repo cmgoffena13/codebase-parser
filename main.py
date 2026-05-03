@@ -12,13 +12,13 @@ TEST_ROOT = Path("/Users/cortlandgoffena/Documents/repos/coder")
 
 def main():
     db = CodeDB(PROJECT_ROOT)
-    processor = CodeProcessor(db, TEST_ROOT)
+    processor = CodeProcessor(db, PROJECT_ROOT)
     processor.process(full=True)
     print(get_directory_tree(db))
     print("--------------------------------")
-    print(get_file_overview(db, "src/internal/memory_utils.py"))
+    print(get_file_overview(db, "src/mcp/directory_tree.py"))
     print("--------------------------------")
-    print(search_symbols(db, "memory"))
+    print(search_symbols(db, "symbol"))
 
 
 if __name__ == "__main__":
