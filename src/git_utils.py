@@ -17,8 +17,6 @@ INDEX_ALWAYS_IGNORE_NAMES = frozenset(
     }
 )
 
-GIT_IGNORE_LIST = INDEX_ALWAYS_IGNORE_NAMES
-
 
 @lru_cache()
 def _path_spec_for_root(gitignore_path: Path, _gitignore_mtime: float) -> PathSpec:
