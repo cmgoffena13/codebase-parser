@@ -1,8 +1,4 @@
-Need to add:
-- `symbol_count` to Files
-
 Possibly can remove:
-- Directories: the `file_count` and `total_lines` columns. Maybe `depth` too.
 - Symbols: `name` and `qualified_name` -- probably just` qualified_name
 - Symbol References: `ref_symbol_name` and `ref_symbol_qualified_name` -- probably just` qualified_name
     - Might just drop the FTS for this as well.
