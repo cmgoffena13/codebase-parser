@@ -164,7 +164,7 @@ class CodeDB:
             for symbol_reference in symbol_references_snapshot.values()
             if not symbol_reference["seen"]
         ]
-        self.delete_ids("imports", symbol_reference_ids)
+        self.delete_ids("symbol_references", symbol_reference_ids)
 
     def get_imports_snapshot(
         self, file_id: int

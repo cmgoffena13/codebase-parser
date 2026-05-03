@@ -9,7 +9,6 @@ PRAGMA synchronous=NORMAL;
 -- DROP TABLE IF EXISTS symbol_references;
 -- DROP TABLE IF EXISTS imports;
 -- DROP TABLE IF EXISTS symbols_fts;
--- DROP TABLE IF EXISTS symbol_references_fts;
 
 CREATE TABLE IF NOT EXISTS watermarks (
     id                  INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
