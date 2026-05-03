@@ -3,10 +3,10 @@ from collections import defaultdict
 from src.db import CodeDB
 
 _TREE_SQL = """
-SELECT 'directory' AS row_type, id, parent_id AS parent_id, name, NULL AS line_count
+SELECT 'directory' AS row_type, id, parent_id AS parent_id, name, NULL AS line_count, NULL AS symbol_count
 FROM directories
 UNION ALL
-SELECT 'file' AS row_type, id, directory_id AS parent_id, name, line_count FROM files
+SELECT 'file' AS row_type, id, directory_id AS parent_id, name, line_count, symbol_count FROM files
 """
 
 
@@ -20,8 +20,10 @@ def _lines_under_parent(children_by_parent_id, parent_key, branch_prefix):
         if is_directory:
             display_name = row["name"] + "/"
         else:
-            n = row["line_count"]
-            display_name = f"{row['name']} ({n})"
+            lines_n = row["line_count"]
+            symbols_n = row["symbol_count"] if row["symbol_count"] is not None else 0
+            stats = f"({lines_n}L)" if symbols_n == 0 else f"({lines_n}L, {symbols_n}S)"
+            display_name = f"{row['name']} {stats}"
         lines.append(f"{branch_prefix}{connector}{display_name}")
         if is_directory:
             continuation = "    " if is_last_child else "│   "
@@ -44,4 +46,4 @@ def get_directory_tree(db: CodeDB) -> str:
     body_lines = _lines_under_parent(children_by_parent_id, None, "")
     if not body_lines:
         return "."
-    return ".\n" + "\n".join(body_lines)
+    return "(L = Lines, S = Symbols)\n" + ".\n" + "\n".join(body_lines)

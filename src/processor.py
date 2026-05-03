@@ -81,9 +81,11 @@ class CodeProcessor:
         if existed:
             file_id = self.files_snapshot[file_relative_path]["id"]
             prior_hash = self.files_snapshot[file_relative_path]["content_hash"]
+            prior_symbol_count = self.files_snapshot[file_relative_path]["symbol_count"]
         else:
             file_id = self.assigner.reserve("files", 1)[0]
             prior_hash = None
+            prior_symbol_count = 0
 
         try:
             file_bytes = file_path.read_bytes()
@@ -93,25 +95,28 @@ class CodeProcessor:
             self.files_skipped += 1
             return
 
-        self.db_batches["files"].append(
-            {
-                "id": file_id,
-                "directory_id": directory_id,
-                "name": file_name,
-                "path": str(file_relative_path),
-                "normalized_path": self._normalize_path(file_relative_path),
-                "language": FILE_EXTENSION_MAPPING.get(file_extension, None),
-                "content_hash": file_hash,
-                "line_count": line_count,
-            }
-        )
-        self.files_snapshot[file_relative_path] = {
+        file_row = {
+            "id": file_id,
+            "directory_id": directory_id,
+            "name": file_name,
+            "path": str(file_relative_path),
+            "normalized_path": self._normalize_path(file_relative_path),
+            "language": FILE_EXTENSION_MAPPING.get(file_extension, None),
+            "content_hash": file_hash,
+            "line_count": line_count,
+            "symbol_count": prior_symbol_count,
+        }
+        if not existed or prior_hash != file_hash:
+            self.db_batches["files"].append(file_row)
+        snap = {
             "id": file_id,
             "directory_id": directory_id,
             "seen": True,
             "content_hash": file_hash,
             "line_count": line_count,
+            "symbol_count": prior_symbol_count,
         }
+        self.files_snapshot[file_relative_path] = snap
 
         # NOTE: Two Gateway Checks for parsing: 1. Time 2. Content Hash.
         if full or (
@@ -125,6 +130,9 @@ class CodeProcessor:
                 FILE_EXTENSION_MAPPING[file_extension], self.assigner, self.db
             )
             symbols, imports, references = parser.parse(file_id, file_bytes)
+            n = len(symbols)
+            file_row["symbol_count"] = n
+            snap["symbol_count"] = n
             self.db_batches["symbols"].extend(symbols)
             self.db_batches["imports"].extend(imports)
             self.db_batches["symbol_references"].extend(references)

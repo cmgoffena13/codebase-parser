@@ -101,6 +101,7 @@ How do we maintain a repo structure of the codebase?
         - path - lookup key
         - content_hash - to detect content changes
         - line_count - stored per file row (e.g. display, tree rendering)
+        - symbol_count - prior count of symbol rows for this file; refreshed to `len(symbols)` after each parse
 
 How do we maintain the symbols, imports, and references of a file?
 - Before we parse a file, query for the last snapshot of the symbols using file path.

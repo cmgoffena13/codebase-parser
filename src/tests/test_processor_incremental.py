@@ -39,6 +39,9 @@ def _db_counts(tmp: Path) -> dict:
             "imports": conn.execute("SELECT COUNT(*) AS c FROM imports").fetchone()[
                 "c"
             ],
+            "symbol_count_sum": conn.execute(
+                "SELECT COALESCE(SUM(symbol_count), 0) AS s FROM files"
+            ).fetchone()["s"],
         }
     finally:
         conn.close()
@@ -67,6 +70,7 @@ def test_two_full_indexes_identical_counts(tmp_path: Path) -> None:
     assert first["files"] >= 1
     assert first["symbols"] >= 1
     assert first["symbol_references"] >= 1
+    assert first["symbol_count_sum"] == first["symbols"]
 
 
 def test_full_then_incremental_identical_counts(tmp_path: Path) -> None:
