@@ -42,7 +42,6 @@ CREATE TABLE IF NOT EXISTS symbols (
     file_id         INTEGER NOT NULL REFERENCES files(id),
     parent_id       INTEGER REFERENCES symbols(id), 
     name            TEXT NOT NULL,                  
-    qualified_name  TEXT,   
     full_name       TEXT UNIQUE NOT NULL,                        
     kind            TEXT NOT NULL,                  
     line_start      INTEGER NOT NULL,                
@@ -60,7 +59,6 @@ CREATE INDEX IF NOT EXISTS symbols_file_id_index ON symbols (file_id);
 CREATE TABLE IF NOT EXISTS symbol_references_staging (
     id                          INTEGER NOT NULL,
     ref_symbol_name             TEXT NOT NULL,                 
-    ref_symbol_qualified_name   TEXT NULL,
     ref_symbol_full_name        TEXT NOT NULL,
     source_file_id              INTEGER NOT NULL REFERENCES files(id),
     source_line                 INTEGER NOT NULL,                
@@ -73,7 +71,6 @@ CREATE TABLE IF NOT EXISTS symbol_references (
     ref_symbol_id               INTEGER NOT NULL REFERENCES symbols(id), 
     ref_symbol_file_id          INTEGER NOT NULL REFERENCES files(id),
     ref_symbol_name             TEXT NOT NULL,       
-    ref_symbol_qualified_name   TEXT NULL,
     ref_symbol_full_name        TEXT NOT NULL,
     source_file_id              INTEGER NOT NULL REFERENCES files(id), 
     source_line                 INTEGER NOT NULL,                

@@ -63,7 +63,7 @@ class PythonParser(ParserBase):
         # 2. Push to stack if it's a container (Class/Function)
         # We need to know the ID *before* recursing so children can use it as parent
         symbol_id = None
-        qualified_name = None
+        scope_path = None
         pushed_stack = False
         kind: str | None = None
         is_test: bool = False
@@ -80,7 +80,7 @@ class PythonParser(ParserBase):
             # symbol/references lose parent context and churn ids across reparses.
             if symbol_data:
                 symbol_id = symbol_data["id"]
-                qualified_name = symbol_data["qualified_name"] or symbol_data["name"]
+                scope_path = symbol_data["full_name"] or symbol_data["name"]
                 self.symbols.append(symbol_data)
                 kind = symbol_data["kind"]
                 is_test = symbol_data.get("is_test", False)
@@ -98,12 +98,10 @@ class PythonParser(ParserBase):
                         )
                     if self.stack:
                         parent_qn = self.stack[-1][1]
-                        qualified_name = f"{parent_qn}.{name}"
+                        scope_path = f"{parent_qn}.{name}"
                     else:
-                        qualified_name = name
-                    symbol_identity = (
-                        qualified_name if qualified_name is not None else name
-                    )
+                        scope_path = name
+                    symbol_identity = scope_path if scope_path is not None else name
                     key = (symbol_identity, kind)
                     if key in self.symbols_snapshot:
                         symbol_id = self.symbols_snapshot[key]["id"]
@@ -114,12 +112,8 @@ class PythonParser(ParserBase):
                             is_test = True
                         elif kind == "method" and name.startswith("test_") and is_test:
                             is_test = True
-            if (
-                symbol_id is not None
-                and qualified_name is not None
-                and kind is not None
-            ):
-                self.stack.append((symbol_id, qualified_name, kind, is_test))
+            if symbol_id is not None and scope_path is not None and kind is not None:
+                self.stack.append((symbol_id, scope_path, kind, is_test))
                 pushed_stack = True
         elif node.type in (
             "assignment",
@@ -158,7 +152,7 @@ class PythonParser(ParserBase):
         if target is None:
             return symbols
 
-        # symbol_leaf is the stable suffix for qualified_name/full_name (e.g. "llm").
+        # symbol_leaf is the stable suffix for full_name (e.g. "llm").
         # name is the source spelling for the DB (e.g. "self.llm"), matching references.
         symbol_leaf = ""
         name = ""
@@ -179,10 +173,10 @@ class PythonParser(ParserBase):
             parent_qn = self.stack[-1][1]
             if target.type == "attribute" and parent_qn.endswith(".__init__"):
                 parent_qn = parent_qn.rsplit(".", 1)[0]
-            qualified_name = f"{parent_qn}.{symbol_leaf}"
+            scope_path = f"{parent_qn}.{symbol_leaf}"
             parent_id = self.stack[-1][0]
         else:
-            qualified_name = None
+            scope_path = None
             parent_id = None
 
         signature = (
@@ -194,7 +188,7 @@ class PythonParser(ParserBase):
 
         kind = "variable"
         is_test = self.stack[-1][3] if self.stack else False
-        symbol_identity = qualified_name if qualified_name is not None else name
+        symbol_identity = scope_path if scope_path is not None else name
         full_name = symbol_identity
         key = (symbol_identity, kind)
         if key in self.symbols_snapshot:
@@ -210,7 +204,6 @@ class PythonParser(ParserBase):
                         "file_id": file_id,
                         "parent_id": parent_id,
                         "name": name,
-                        "qualified_name": qualified_name,
                         "full_name": full_name,
                         "kind": kind,
                         "line_start": line_start,
@@ -238,7 +231,6 @@ class PythonParser(ParserBase):
                     "file_id": file_id,
                     "parent_id": parent_id,
                     "name": name,
-                    "qualified_name": qualified_name,
                     "full_name": full_name,
                     "kind": kind,
                     "line_start": line_start,
@@ -306,9 +298,9 @@ class PythonParser(ParserBase):
 
         if self.stack:
             parent_qn = self.stack[-1][1]
-            qualified_name = f"{parent_qn}.{name}"
+            scope_path = f"{parent_qn}.{name}"
         else:
-            qualified_name = None
+            scope_path = None
 
         # Extract Modifiers (Decorators)
         modifiers = []
@@ -390,7 +382,7 @@ class PythonParser(ParserBase):
         elif kind == "method" and name.startswith("test_") and parent_is_test:
             is_test = True
 
-        symbol_identity = qualified_name if qualified_name is not None else name
+        symbol_identity = scope_path if scope_path is not None else name
         full_name = symbol_identity
         key = (symbol_identity, kind)
         if key in self.symbols_snapshot:
@@ -409,7 +401,6 @@ class PythonParser(ParserBase):
                     "file_id": file_id,
                     "parent_id": self.stack[-1][0] if self.stack else None,
                     "name": name,
-                    "qualified_name": qualified_name,
                     "full_name": full_name,
                     "kind": kind,
                     "line_start": line_start,
@@ -436,7 +427,6 @@ class PythonParser(ParserBase):
                 "file_id": file_id,
                 "parent_id": self.stack[-1][0] if self.stack else None,
                 "name": name,
-                "qualified_name": qualified_name,
                 "full_name": full_name,
                 "kind": kind,
                 "line_start": line_start,
@@ -685,23 +675,23 @@ class PythonParser(ParserBase):
             if base_name in self.builtin_names or base_name in self.std_module_names:
                 return
 
-        # Build Qualified Name only when we can resolve parent context.
-        qualified_name = None
+        # Resolved full_name for self./cls. when parent class is on the stack.
+        resolved_full_name = None
         if target_name.startswith("self.") or target_name.startswith("cls."):
             suffix = target_name.split(".", 1)[1]
             for entry in reversed(self.stack):
                 if entry[2] == "class":
-                    qualified_name = f"{entry[1]}.{suffix}"
+                    resolved_full_name = f"{entry[1]}.{suffix}"
                     break
             else:
                 if self.stack:
-                    qualified_name = f"{self.stack[-1][1]}.{suffix}"
+                    resolved_full_name = f"{self.stack[-1][1]}.{suffix}"
 
         # If it's a simple name, we can't resolve it yet, so keep raw
         # But if it's "module.func", we keep "module.func"
         source_line = node.start_point.row + 1
         ref_symbol_full_name = (
-            qualified_name if qualified_name is not None else target_name
+            resolved_full_name if resolved_full_name is not None else target_name
         )
         key = (ref_symbol_full_name, ref_kind, source_line)
         context = node.text.decode("utf-8") if node.text is not None else ""
@@ -713,7 +703,6 @@ class PythonParser(ParserBase):
                     {
                         "id": symbol_reference_id,
                         "ref_symbol_name": target_name,
-                        "ref_symbol_qualified_name": qualified_name,
                         "ref_symbol_full_name": ref_symbol_full_name,
                         "source_file_id": file_id,
                         "source_line": source_line,
@@ -734,7 +723,6 @@ class PythonParser(ParserBase):
                 {
                     "id": symbol_reference_id,
                     "ref_symbol_name": target_name,
-                    "ref_symbol_qualified_name": qualified_name,
                     "ref_symbol_full_name": ref_symbol_full_name,
                     "source_file_id": file_id,
                     "source_line": source_line,
