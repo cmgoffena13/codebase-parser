@@ -283,7 +283,14 @@ class PythonParser(ParserBase):
         if name_node.text is None:
             return None
         name = name_node.text.decode("utf-8")
-        line_start = node.start_point.row + 1
+        outer = (
+            node.parent
+            if node.parent is not None and node.parent.type == "decorated_definition"
+            else None
+        )
+        line_start = (
+            outer.start_point.row + 1 if outer is not None else node.start_point.row + 1
+        )
         line_end = node.end_point.row + 1
 
         if node.type == "class_definition":
@@ -329,12 +336,13 @@ class PythonParser(ParserBase):
                             continue
                         base_classes.append(base.text.decode("utf-8"))
 
-        # Extract Signature
-        # Slice from the start of the definition up to the start of the body.
+        # Extract Signature: entire decorated_definition prefix (all @ lines) through the
+        # inner definition header (same end_byte = start of def/class body).
         body_node = node.child_by_field_name("body")
         end_byte = body_node.start_byte if body_node is not None else node.end_byte
+        sig_start_byte = outer.start_byte if outer is not None else node.start_byte
         signature = (
-            file_bytes[node.start_byte : end_byte]
+            file_bytes[sig_start_byte:end_byte]
             .decode("utf-8", errors="replace")
             .rstrip()
         )
