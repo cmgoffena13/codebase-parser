@@ -9,19 +9,14 @@ def test_type_annotations_optional_generics_and_forward_refs(
 
     assert len(symbols) == 1
     assert len(imports) == 3
-    assert len(references) == 3
+    assert len(references) == 1
     assert_symbol_references_invariants(references)
 
-    # builtins should be skipped; Path should be present (including forward ref)
     assert not any(
         r["ref_kind"] == "type_annotation" and r["ref_symbol_name"] == "list"
         for r in references
     )
-    assert any(
-        r["ref_kind"] == "type_annotation" and r["ref_symbol_name"] == "Path"
-        for r in references
-    )
-    # Current behavior: forward refs keep quotes (not normalized)
+    # Optional/List/typing.Path annotations skipped as stdlib-mapped; only quoted forward ref remains
     assert any(
         r["ref_kind"] == "type_annotation" and r["ref_symbol_name"] == '"Path"'
         for r in references

@@ -41,12 +41,14 @@ class PythonParser(ParserBase):
         self.symbols_references_snapshot = {}
         self.imports_snapshot = {}
         self._class_param_annos: Dict[str, Dict[str, str]] = {}
+        self._ref_root_module: Dict[str, str] = {}
 
     def parse(
         self, file_id: int, file_bytes: bytes
     ) -> Tuple[List[Dict], List[Dict], List[Dict]]:
         self.stack = []
         self._class_param_annos = {}
+        self._ref_root_module = {}
         self.symbols = []
         self.imports = []
         self.symbol_references = []
@@ -226,6 +228,75 @@ class PythonParser(ParserBase):
             }
             self.symbol_references.append({"id": symbol_reference_id, **row})
 
+    def _register_import_ref_binding(
+        self,
+        import_path: str,
+        imported_symbol: str,
+        alias: Optional[str],
+        import_type: str,
+    ) -> None:
+        """Map local names to top-level module for filtering stdlib re-exports (e.g. Path -> pathlib)."""
+        if import_type == "relative":
+            return
+        top = import_path.split(".", 1)[0] if import_path else ""
+        if not top:
+            return
+        if imported_symbol:
+            local = alias if alias else imported_symbol
+            self._ref_root_module[local] = top
+        else:
+            if alias:
+                self._ref_root_module[alias] = top
+            else:
+                root_local = import_path.split(".", 1)[0]
+                self._ref_root_module[root_local] = top
+
+    @staticmethod
+    def _children_import_first(node: Node) -> List[Node]:
+        """Statement suites: visit imports before siblings so ref filters see bindings."""
+        imports = ("import_statement", "import_from_statement")
+        first: list[Node] = []
+        rest: list[Node] = []
+        for ch in node.children:
+            if ch.type in imports:
+                first.append(ch)
+            else:
+                rest.append(ch)
+        return first + rest
+
+    @staticmethod
+    def _call_is_literal_receiver_method(func_node: Node) -> bool:
+        if func_node.type != "attribute":
+            return False
+        obj = func_node.child_by_field_name("object")
+        if obj is None:
+            return False
+        return obj.type in (
+            "string",
+            "integer",
+            "float",
+            "true",
+            "false",
+            "none",
+        )
+
+    def _should_skip_import_mapped_stdlib(self, root_id: str) -> bool:
+        mod = self._ref_root_module.get(root_id)
+        return bool(mod and mod in self.std_module_names)
+
+    @staticmethod
+    def _reference_root_identifier(target_name: str) -> str:
+        """First identifier token (handles Path('.').resolve vs os.path.join)."""
+        i = 0
+        for ch in target_name:
+            if ch.isalnum() or ch == "_":
+                i += 1
+            else:
+                break
+        if i > 0:
+            return target_name[:i]
+        return target_name.split(".", 1)[0]
+
     def _walk(self, node: Node, file_id: int, file_bytes: bytes) -> None:
         """Recursive DFS traversal."""
         # 1. Extract Data for CURRENT node
@@ -296,8 +367,13 @@ class PythonParser(ParserBase):
             ):
                 self.symbols.append(symbol_data)
 
-        # 3. Recurse
-        for child in node.children:
+        # 3. Recurse (import-first in statement suites so bindings exist before siblings)
+        children = (
+            self._children_import_first(node)
+            if node.type in ("module", "block")
+            else node.children
+        )
+        for child in children:
             self._walk(child, file_id, file_bytes)
 
         # 4. Pop from stack if we pushed
@@ -692,6 +768,9 @@ class PythonParser(ParserBase):
                     import_scope,
                     signature,
                 )
+                self._register_import_ref_binding(
+                    import_path, imported_symbol, alias, import_type
+                )
 
         elif node.type == "import_statement":
             import_type = "absolute"
@@ -730,6 +809,9 @@ class PythonParser(ParserBase):
                     import_scope,
                     signature,
                 )
+                self._register_import_ref_binding(
+                    import_path, imported_symbol, alias, import_type
+                )
 
     def _extract_reference(self, node: Node, ref_kind: str, file_id: int) -> None:
         """Extract Reference (Call, Access, Type)."""
@@ -751,6 +833,8 @@ class PythonParser(ParserBase):
             # func() -> target is 'func'
             func_node = node.child_by_field_name("function")
             if func_node:
+                if self._call_is_literal_receiver_method(func_node):
+                    return
                 if func_node.text is None:
                     return
                 target_name = func_node.text.decode("utf-8")
@@ -783,12 +867,16 @@ class PythonParser(ParserBase):
         if not target_name:
             return
 
-        base_name = target_name.split(".", 1)[0]
+        root_id = self._reference_root_identifier(target_name)
         if ref_kind == "type_annotation":
-            if base_name in self.builtin_names:
+            if root_id in self.builtin_names:
+                return
+            if self._should_skip_import_mapped_stdlib(root_id):
                 return
         else:
-            if base_name in self.builtin_names or base_name in self.std_module_names:
+            if root_id in self.builtin_names or root_id in self.std_module_names:
+                return
+            if self._should_skip_import_mapped_stdlib(root_id):
                 return
 
         # Resolved qualified_name for self./cls. when parent class is on the stack.

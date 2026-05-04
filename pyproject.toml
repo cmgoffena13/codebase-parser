@@ -29,4 +29,4 @@ pythonpath = [ "." ]
 lint.select = ["I"]
 
 [tool.ty.src]
-exclude = ["./tests/files_to_parse/"]
+exclude = ["src/tests/files_to_parse/"]
