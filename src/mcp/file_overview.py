@@ -2,6 +2,7 @@ from collections import defaultdict
 from typing import Optional
 
 from src.db import CodeDB
+from src.mcp.clip import clipped_doc_lines
 
 _SYMBOLS_SQL = """
 SELECT id, parent_id, kind, full_name, name, line_start, line_end, signature, docstring
@@ -41,14 +42,11 @@ def _format_sig_doc(detail_prefix: str, row) -> list[str]:
             lines.append(f"{detail_prefix}    {extra}")
         if total_sig_lines > _MAX_SIGNATURE_LINES:
             omitted = total_sig_lines - _MAX_SIGNATURE_LINES
-            lines.append(f"{detail_prefix}    ... ({omitted} lines omitted)")
+            lines.append(f"{detail_prefix}    ...[truncated {omitted} lines]")
     doc_raw = (row["docstring"] or "").strip()
     if doc_raw:
-        first = doc_raw.splitlines()[0].strip()
-        if len(first) > _MAX_DOCSTRING_CHARS:
-            first = first[: _MAX_DOCSTRING_CHARS - 3] + "..."
-        escaped = first.replace("\\", "\\\\").replace('"', '\\"')
-        lines.append(f'{detail_prefix}Doc: "{escaped}"')
+        first_line = doc_raw.splitlines()[0].strip()
+        lines.extend(clipped_doc_lines(detail_prefix, first_line, _MAX_DOCSTRING_CHARS))
     return lines
 
 

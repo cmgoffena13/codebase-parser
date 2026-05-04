@@ -2,6 +2,7 @@ import sqlite3
 from collections import OrderedDict
 
 from src.db import CodeDB
+from src.mcp.clip import clipped_doc_lines
 
 _SYMBOL_SEARCH_SQL = """
 SELECT
@@ -39,13 +40,6 @@ def build_fts_query(user_input: str) -> str:
     return " OR ".join(f"{term}*" for term in terms)
 
 
-def _truncate_doc(doc: str) -> str:
-    doc = doc.replace("\n", " ").strip()
-    if len(doc) > _MAX_DOCSTRING_CHARS:
-        return doc[: _MAX_DOCSTRING_CHARS - 3] + "..."
-    return doc
-
-
 def _sig_doc_lines(detail_prefix: str, sig: str, doc: str) -> list[str]:
     lines: list[str] = []
     sig = sig.strip()
@@ -59,11 +53,10 @@ def _sig_doc_lines(detail_prefix: str, sig: str, doc: str) -> list[str]:
             lines.append(f"{detail_prefix}    {extra}")
         if total > _MAX_SIGNATURE_LINES:
             lines.append(
-                f"{detail_prefix}    ... ({total - _MAX_SIGNATURE_LINES} lines omitted)"
+                f"{detail_prefix}    ...[truncated {total - _MAX_SIGNATURE_LINES} lines]"
             )
-    if doc:
-        escaped = doc.replace("\\", "\\\\").replace('"', '\\"')
-        lines.append(f'{detail_prefix}Doc: "{escaped}"')
+    if doc.strip():
+        lines.extend(clipped_doc_lines(detail_prefix, doc, _MAX_DOCSTRING_CHARS))
     return lines
 
 
@@ -119,9 +112,8 @@ def search_symbols(db: CodeDB, query: str, limit: int = 20) -> str:
             kind_padded = kind.ljust(max_kind)
             sig = row["signature"] or ""
             doc_raw = row["docstring"] or ""
-            doc = _truncate_doc(doc_raw) if doc_raw.strip() else ""
 
             lines.append(f"{connector}{loc}  {kind_padded}  {full_name}")
-            lines.extend(_sig_doc_lines(detail_prefix, sig, doc))
+            lines.extend(_sig_doc_lines(detail_prefix, sig, doc_raw))
 
     return "\n".join(lines).rstrip() + "\n"

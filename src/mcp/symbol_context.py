@@ -1,6 +1,7 @@
 from collections import defaultdict
 
 from src.db import CodeDB
+from src.mcp.clip import clip
 
 _MAX_REFERENCE_CONTEXT = 150
 _REFERENCE_FETCH_LIMIT = 50
@@ -36,11 +37,9 @@ def _lines_range_header(line_start: int, line_end: int) -> str:
     return f"{line_start}–{line_end}"
 
 
-def _truncate_context(text: str, max_len: int = _MAX_REFERENCE_CONTEXT) -> str:
+def _format_reference_context(text: str, max_len: int = _MAX_REFERENCE_CONTEXT) -> str:
     t = text.replace("\n", " ").strip()
-    if len(t) > max_len:
-        return t[: max_len - 3] + "..."
-    return t
+    return clip(t, max_len)
 
 
 def _definition_gutter_width(line_start: int, line_count: int) -> int:
@@ -113,7 +112,7 @@ def get_symbol_context(db: CodeDB, full_name: str) -> str:
         lines.append("")
         lines.append(f"{heading} ({len(items)})")
         for r in items:
-            ctx = _truncate_context(r["context"] or "")
+            ctx = _format_reference_context(r["context"] or "")
             lines.append(f"  • {r['source_path']}:{r['source_line']} - {ctx}")
 
     for kind in sorted(by_kind.keys()):
@@ -126,7 +125,7 @@ def get_symbol_context(db: CodeDB, full_name: str) -> str:
         lines.append("")
         lines.append(f"## {title} ({len(items)})")
         for r in items:
-            ctx = _truncate_context(r["context"] or "")
+            ctx = _format_reference_context(r["context"] or "")
             lines.append(f"  • {r['source_path']}:{r['source_line']} - {ctx}")
 
     return "\n".join(lines) + "\n"
