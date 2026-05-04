@@ -6,6 +6,32 @@ from src.tests.python_parser._assertions import (
 )
 
 
+def test_self_attr_call_resolves_via_init_param_annotation(
+    python_parser, fixture_bytes
+):
+    """self.dep.* resolves via __init__ param type (DependencyType)."""
+    file_bytes = fixture_bytes("ctor_param_self_call.py")
+    symbols, imports, references = python_parser.parse(40, file_bytes)
+
+    assert_symbols_invariants(symbols)
+    assert_imports_invariants(imports)
+    assert_symbol_references_invariants(references)
+
+    call = next(
+        r
+        for r in references
+        if r["ref_kind"] == "call" and r["ref_symbol_name"] == "self.dep.invoke"
+    )
+    assert call["ref_symbol_qualified_name"] == "DependencyType.invoke"
+
+    access = next(
+        r
+        for r in references
+        if r["ref_kind"] == "access" and r["ref_symbol_name"] == "self.dep"
+    )
+    assert access["ref_symbol_qualified_name"] == "DependencyType"
+
+
 def test_symbol_references_access_and_type_annotation(python_parser, fixture_bytes):
     file_bytes = fixture_bytes("references_cases.py")
     symbols, imports, references = python_parser.parse(4, file_bytes)

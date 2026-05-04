@@ -33,11 +33,13 @@ class PythonParser(ParserBase):
         self.symbols_snapshot = {}
         self.symbols_references_snapshot = {}
         self.imports_snapshot = {}
+        self._class_param_annos: Dict[str, Dict[str, str]] = {}
 
     def parse(
         self, file_id: int, file_bytes: bytes
     ) -> Tuple[List[Dict], List[Dict], List[Dict]]:
         self.stack = []
+        self._class_param_annos = {}
         self.symbols = []
         self.imports = []
         self.symbol_references = []
@@ -75,6 +77,7 @@ class PythonParser(ParserBase):
         ):
             # Extract symbol details first
             symbol_data = self._extract_symbol(node, file_id, file_bytes)
+            name: Optional[str] = None
             # Always push a stack frame for container defs when they exist in the DB
             # snapshot (even if we don't emit an updated row), otherwise nested
             # symbol/references lose parent context and churn ids across reparses.
@@ -84,6 +87,7 @@ class PythonParser(ParserBase):
                 self.symbols.append(symbol_data)
                 kind = symbol_data["kind"]
                 is_test = symbol_data.get("is_test", False)
+                name = symbol_data["name"]
             else:
                 name_node = node.child_by_field_name("name")
                 if name_node is not None and name_node.text is not None:
@@ -113,6 +117,16 @@ class PythonParser(ParserBase):
                         elif kind == "method" and name.startswith("test_") and is_test:
                             is_test = True
             if symbol_id is not None and scope_path is not None and kind is not None:
+                if (
+                    name == "__init__"
+                    and kind == "method"
+                    and node.type == "function_definition"
+                    and self.stack
+                    and self.stack[-1][2] == "class"
+                ):
+                    annos = self._ctor_param_types_from_function(node)
+                    if annos:
+                        self._class_param_annos[self.stack[-1][1]] = annos
                 self.stack.append((symbol_id, scope_path, kind, is_test))
                 pushed_stack = True
         elif node.type in (
@@ -132,7 +146,42 @@ class PythonParser(ParserBase):
 
         # 4. Pop from stack if we pushed
         if pushed_stack:
+            popped = self.stack[-1]
+            if popped[2] == "class":
+                self._class_param_annos.pop(popped[1], None)
             self.stack.pop()
+
+    def _simple_annotation_type_name(self, type_node: Optional[Node]) -> Optional[str]:
+        """Single identifier annotations only (e.g. `CodeDB`); else None."""
+        if type_node is None:
+            return None
+        for child in type_node.children:
+            if child.type == "identifier" and child.text is not None:
+                return child.text.decode("utf-8")
+        return None
+
+    def _ctor_param_types_from_function(self, node: Node) -> dict[str, str]:
+        """Map __init__ parameter names to simple annotated type names."""
+        out: dict[str, str] = {}
+        params = node.child_by_field_name("parameters")
+        if params is None:
+            return out
+        for ch in params.named_children:
+            if ch.type != "typed_parameter":
+                continue
+            param_name: str | None = None
+            ann: Node | None = None
+            for c in ch.children:
+                if c.type == "identifier" and param_name is None and c.text is not None:
+                    param_name = c.text.decode("utf-8")
+                elif c.type == "type":
+                    ann = c
+            if not param_name or param_name in ("self", "cls"):
+                continue
+            simple = self._simple_annotation_type_name(ann)
+            if simple:
+                out[param_name] = simple
+        return out
 
     def _extract_variable_symbols(
         self, node: Node, file_id: int, file_bytes: bytes
@@ -679,10 +728,22 @@ class PythonParser(ParserBase):
         resolved_qualified = None
         if target_name.startswith("self.") or target_name.startswith("cls."):
             suffix = target_name.split(".", 1)[1]
+            first_seg, _, rest_after_first = suffix.partition(".")
             for entry in reversed(self.stack):
-                if entry[2] == "class":
-                    resolved_qualified = f"{entry[1]}.{suffix}"
-                    break
+                if entry[2] != "class":
+                    continue
+                class_qn = entry[1]
+                ctor_map = self._class_param_annos.get(class_qn)
+                if ctor_map and first_seg in ctor_map:
+                    type_name = ctor_map[first_seg]
+                    resolved_qualified = (
+                        f"{type_name}.{rest_after_first}"
+                        if rest_after_first
+                        else type_name
+                    )
+                else:
+                    resolved_qualified = f"{class_qn}.{suffix}"
+                break
             else:
                 if self.stack:
                     resolved_qualified = f"{self.stack[-1][1]}.{suffix}"
