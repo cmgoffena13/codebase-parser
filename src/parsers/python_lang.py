@@ -2,13 +2,20 @@ import ast
 import builtins
 import sys
 import typing
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, NamedTuple, Optional, Tuple
 
 from tree_sitter import Node, Parser
 
 from src.assigner import GlobalIDAssigner
 from src.db import CodeDB
 from src.parsers.base import ParserBase
+
+
+class StackFrame(NamedTuple):
+    symbol_id: int
+    qualified_name: str
+    kind: str
+    is_test: bool
 
 
 class PythonParser(ParserBase):
@@ -26,7 +33,7 @@ class PythonParser(ParserBase):
             name for name in getattr(typing, "__all__", []) if isinstance(name, str)
         )
         self.std_module_names: set[str] = getattr(sys, "stdlib_module_names", set())
-        self.stack: List[Tuple[int, str, str, bool]] = []
+        self.stack: List[StackFrame] = []
         self.symbols: List[Dict] = []
         self.imports: List[Dict] = []
         self.symbol_references: List[Dict] = []
@@ -56,6 +63,168 @@ class PythonParser(ParserBase):
         self.db.delete_symbols(self.symbols_snapshot)
         self.db.delete_imports(self.imports_snapshot)
         return self.symbols, self.imports, self.symbol_references
+
+    @staticmethod
+    def _normalize_signature_bytes(
+        file_bytes: bytes, start_byte: int, end_byte: int, *, tail_rstrip: bool
+    ) -> str:
+        raw = file_bytes[start_byte:end_byte].decode("utf-8", errors="replace")
+        text = raw.rstrip() if tail_rstrip else raw.strip()
+        return " ".join(text.split())
+
+    def _kind_for_definition(self, node: Node) -> str:
+        if node.type == "class_definition":
+            return "class"
+        if node.type in ("function_definition", "async_function_definition"):
+            return (
+                "method"
+                if (self.stack and self.stack[-1].kind == "class")
+                else "function"
+            )
+        return "variable"
+
+    def _snapshot_branch_is_test(self, kind: str, name: str) -> bool:
+        base = self.stack[-1].is_test if self.stack else False
+        if kind == "function" and name.startswith("test_"):
+            return True
+        if kind == "class" and name.startswith("Test"):
+            return True
+        if kind == "method" and name.startswith("test_") and base:
+            return True
+        return base
+
+    def _container_symbol_dict(
+        self,
+        symbol_id: int,
+        file_id: int,
+        name: str,
+        qualified_name: str,
+        kind: str,
+        line_start: int,
+        line_end: int,
+        signature: str,
+        docstring: Optional[str],
+        modifiers: list,
+        base_classes: list[str],
+        is_test: bool,
+    ) -> Dict:
+        return {
+            "id": symbol_id,
+            "file_id": file_id,
+            "parent_id": self.stack[-1].symbol_id if self.stack else None,
+            "name": name,
+            "qualified_name": qualified_name,
+            "kind": kind,
+            "line_start": line_start,
+            "line_end": line_end,
+            "line_count": line_end - line_start + 1,
+            "signature": signature,
+            "docstring": docstring,
+            "modifiers": str(modifiers) if modifiers else None,
+            "language": "python",
+            "base_classes": str(base_classes) if base_classes else None,
+            "is_test": is_test,
+        }
+
+    def _variable_symbol_dict(
+        self,
+        symbol_id: int,
+        file_id: int,
+        parent_id: Optional[int],
+        name: str,
+        qualified_name: str,
+        line_start: int,
+        line_end: int,
+        signature: str,
+        is_test: bool,
+    ) -> Dict:
+        return {
+            "id": symbol_id,
+            "file_id": file_id,
+            "parent_id": parent_id,
+            "name": name,
+            "qualified_name": qualified_name,
+            "kind": "variable",
+            "line_start": line_start,
+            "line_end": line_end,
+            "line_count": line_end - line_start + 1,
+            "signature": signature,
+            "docstring": None,
+            "modifiers": None,
+            "language": "python",
+            "base_classes": None,
+            "is_test": is_test,
+        }
+
+    def _record_import(
+        self,
+        file_id: int,
+        import_path: str,
+        imported_symbol: str,
+        alias: Optional[str],
+        line_number: int,
+        import_type: str,
+        import_scope: str,
+        signature: str,
+    ) -> None:
+        key = (import_path, imported_symbol)
+        row = {
+            "file_id": file_id,
+            "import_path": import_path,
+            "imported_symbol": imported_symbol,
+            "alias": alias,
+            "line_number": line_number,
+            "import_type": import_type,
+            "import_scope": import_scope,
+            "signature": signature,
+        }
+        if key in self.imports_snapshot:
+            self.imports_snapshot[key]["seen"] = True
+            if self.imports_snapshot[key]["line_number"] != line_number:
+                import_id = self.imports_snapshot[key]["id"]
+                self.imports.append({"id": import_id, **row})
+        else:
+            import_id = self.assigner.reserve("imports", 1)[0]
+            self.imports_snapshot[key] = {
+                "id": import_id,
+                "line_number": line_number,
+                "seen": True,
+            }
+            self.imports.append({"id": import_id, **row})
+
+    def _record_symbol_reference(
+        self,
+        file_id: int,
+        target_name: str,
+        ref_symbol_qualified_name: str,
+        source_line: int,
+        ref_kind: str,
+        context: str,
+        key: Tuple[str, str, int],
+    ) -> None:
+        row = {
+            "ref_symbol_name": target_name,
+            "ref_symbol_qualified_name": ref_symbol_qualified_name,
+            "source_file_id": file_id,
+            "source_line": source_line,
+            "ref_kind": ref_kind,
+            "context": context,
+        }
+        if key in self.symbols_references_snapshot:
+            self.symbols_references_snapshot[key]["seen"] = True
+            if self.symbols_references_snapshot[key]["context"] != context:
+                symbol_reference_id = self.symbols_references_snapshot[key]["id"]
+                self.symbol_references.append({"id": symbol_reference_id, **row})
+                self.symbols_references_snapshot[key]["context"] = context
+        else:
+            symbol_reference_id = self.assigner.reserve("symbol_references", 1)[0]
+            self.symbols_references_snapshot[key] = {
+                "id": symbol_reference_id,
+                "source_line": source_line,
+                "context": context,
+                "seen": True,
+            }
+            self.symbol_references.append({"id": symbol_reference_id, **row})
 
     def _walk(self, node: Node, file_id: int, file_bytes: bytes) -> None:
         """Recursive DFS traversal."""
@@ -92,16 +261,9 @@ class PythonParser(ParserBase):
                 name_node = node.child_by_field_name("name")
                 if name_node is not None and name_node.text is not None:
                     name = name_node.text.decode("utf-8")
-                    if node.type == "class_definition":
-                        kind = "class"
-                    else:
-                        kind = (
-                            "method"
-                            if (self.stack and self.stack[-1][2] == "class")
-                            else "function"
-                        )
+                    kind = self._kind_for_definition(node)
                     if self.stack:
-                        parent_qn = self.stack[-1][1]
+                        parent_qn = self.stack[-1].qualified_name
                         scope_path = f"{parent_qn}.{name}"
                     else:
                         scope_path = name
@@ -109,25 +271,19 @@ class PythonParser(ParserBase):
                     key = (symbol_identity, kind)
                     if key in self.symbols_snapshot:
                         symbol_id = self.symbols_snapshot[key]["id"]
-                        is_test = self.stack[-1][3] if self.stack else False
-                        if kind == "function" and name.startswith("test_"):
-                            is_test = True
-                        elif kind == "class" and name.startswith("Test"):
-                            is_test = True
-                        elif kind == "method" and name.startswith("test_") and is_test:
-                            is_test = True
+                        is_test = self._snapshot_branch_is_test(kind, name)
             if symbol_id is not None and scope_path is not None and kind is not None:
                 if (
                     name == "__init__"
                     and kind == "method"
                     and node.type == "function_definition"
                     and self.stack
-                    and self.stack[-1][2] == "class"
+                    and self.stack[-1].kind == "class"
                 ):
                     annos = self._ctor_param_types_from_function(node)
                     if annos:
-                        self._class_param_annos[self.stack[-1][1]] = annos
-                self.stack.append((symbol_id, scope_path, kind, is_test))
+                        self._class_param_annos[self.stack[-1].qualified_name] = annos
+                self.stack.append(StackFrame(symbol_id, scope_path, kind, is_test))
                 pushed_stack = True
         elif node.type in (
             "assignment",
@@ -147,8 +303,8 @@ class PythonParser(ParserBase):
         # 4. Pop from stack if we pushed
         if pushed_stack:
             popped = self.stack[-1]
-            if popped[2] == "class":
-                self._class_param_annos.pop(popped[1], None)
+            if popped.kind == "class":
+                self._class_param_annos.pop(popped.qualified_name, None)
             self.stack.pop()
 
     def _simple_annotation_type_name(self, type_node: Optional[Node]) -> Optional[str]:
@@ -191,8 +347,8 @@ class PythonParser(ParserBase):
         # Only capture module/class plus __init__ assignments.
         if (
             self.stack
-            and self.stack[-1][2] != "class"
-            and not self.stack[-1][1].endswith(".__init__")
+            and self.stack[-1].kind != "class"
+            and not self.stack[-1].qualified_name.endswith(".__init__")
         ):
             return symbols
 
@@ -219,24 +375,21 @@ class PythonParser(ParserBase):
         line_end = node.end_point.row + 1
 
         if self.stack:
-            parent_qn = self.stack[-1][1]
+            parent_qn = self.stack[-1].qualified_name
             if target.type == "attribute" and parent_qn.endswith(".__init__"):
                 parent_qn = parent_qn.rsplit(".", 1)[0]
             scope_path = f"{parent_qn}.{symbol_leaf}"
-            parent_id = self.stack[-1][0]
+            parent_id = self.stack[-1].symbol_id
         else:
             scope_path = None
             parent_id = None
 
-        signature = (
-            file_bytes[node.start_byte : node.end_byte]
-            .decode("utf-8", errors="replace")
-            .strip()
+        signature = self._normalize_signature_bytes(
+            file_bytes, node.start_byte, node.end_byte, tail_rstrip=False
         )
-        signature = " ".join(signature.split())
 
         kind = "variable"
-        is_test = self.stack[-1][3] if self.stack else False
+        is_test = self.stack[-1].is_test if self.stack else False
         symbol_identity = scope_path if scope_path is not None else name
         qualified_name = symbol_identity
         key = (symbol_identity, kind)
@@ -248,23 +401,17 @@ class PythonParser(ParserBase):
             ):
                 symbol_id = self.symbols_snapshot[key]["id"]
                 symbols.append(
-                    {
-                        "id": symbol_id,
-                        "file_id": file_id,
-                        "parent_id": parent_id,
-                        "name": name,
-                        "qualified_name": qualified_name,
-                        "kind": kind,
-                        "line_start": line_start,
-                        "line_end": line_end,
-                        "line_count": line_end - line_start + 1,
-                        "signature": signature,
-                        "docstring": None,
-                        "modifiers": None,
-                        "language": "python",
-                        "base_classes": None,
-                        "is_test": is_test,
-                    }
+                    self._variable_symbol_dict(
+                        symbol_id,
+                        file_id,
+                        parent_id,
+                        name,
+                        qualified_name,
+                        line_start,
+                        line_end,
+                        signature,
+                        is_test,
+                    )
                 )
         else:
             symbol_id = self.assigner.reserve("symbols", 1)[0]
@@ -275,23 +422,17 @@ class PythonParser(ParserBase):
                 "line_end": line_end,
             }
             symbols.append(
-                {
-                    "id": symbol_id,
-                    "file_id": file_id,
-                    "parent_id": parent_id,
-                    "name": name,
-                    "qualified_name": qualified_name,
-                    "kind": kind,
-                    "line_start": line_start,
-                    "line_end": line_end,
-                    "line_count": line_end - line_start + 1,
-                    "signature": signature,
-                    "docstring": None,
-                    "modifiers": None,
-                    "language": "python",
-                    "base_classes": None,
-                    "is_test": is_test,
-                }
+                self._variable_symbol_dict(
+                    symbol_id,
+                    file_id,
+                    parent_id,
+                    name,
+                    qualified_name,
+                    line_start,
+                    line_end,
+                    signature,
+                    is_test,
+                )
             )
 
         return symbols
@@ -334,19 +475,10 @@ class PythonParser(ParserBase):
         )
         line_end = node.end_point.row + 1
 
-        if node.type == "class_definition":
-            kind = "class"
-        elif node.type in ("function_definition", "async_function_definition"):
-            # Check if inside a class
-            if self.stack and self.stack[-1][2] == "class":
-                kind = "method"
-            else:
-                kind = "function"
-        else:
-            kind = "variable"  # Fallback for assignments
+        kind = self._kind_for_definition(node)
 
         if self.stack:
-            parent_qn = self.stack[-1][1]
+            parent_qn = self.stack[-1].qualified_name
             scope_path = f"{parent_qn}.{name}"
         else:
             scope_path = None
@@ -382,12 +514,9 @@ class PythonParser(ParserBase):
         body_node = node.child_by_field_name("body")
         end_byte = body_node.start_byte if body_node is not None else node.end_byte
         sig_start_byte = outer.start_byte if outer is not None else node.start_byte
-        signature = (
-            file_bytes[sig_start_byte:end_byte]
-            .decode("utf-8", errors="replace")
-            .rstrip()
+        signature = self._normalize_signature_bytes(
+            file_bytes, sig_start_byte, end_byte, tail_rstrip=True
         )
-        signature = " ".join(signature.split())
 
         # Extract Docstring (First string in body)
         docstring = None
@@ -417,7 +546,7 @@ class PythonParser(ParserBase):
                     break
 
         # Determine is_test (pytest + unittest)
-        parent_is_test = self.stack[-1][3] if self.stack else False
+        parent_is_test = self.stack[-1].is_test if self.stack else False
         is_test = False
         # Pytest
         if kind == "function" and name.startswith("test_"):
@@ -445,23 +574,20 @@ class PythonParser(ParserBase):
                 symbol_id = self.symbols_snapshot[key]["id"]
                 self.symbols_snapshot[key]["line_start"] = line_start
                 self.symbols_snapshot[key]["line_end"] = line_end
-                return {
-                    "id": symbol_id,
-                    "file_id": file_id,
-                    "parent_id": self.stack[-1][0] if self.stack else None,
-                    "name": name,
-                    "qualified_name": qualified_name,
-                    "kind": kind,
-                    "line_start": line_start,
-                    "line_end": line_end,
-                    "line_count": line_end - line_start + 1,
-                    "signature": signature,
-                    "docstring": docstring,
-                    "modifiers": str(modifiers) if modifiers else None,
-                    "language": "python",
-                    "base_classes": str(base_classes) if base_classes else None,
-                    "is_test": is_test,
-                }
+                return self._container_symbol_dict(
+                    symbol_id,
+                    file_id,
+                    name,
+                    qualified_name,
+                    kind,
+                    line_start,
+                    line_end,
+                    signature,
+                    docstring,
+                    modifiers,
+                    base_classes,
+                    is_test,
+                )
             return None
         else:
             symbol_id = self.assigner.reserve("symbols", 1)[0]
@@ -471,23 +597,20 @@ class PythonParser(ParserBase):
                 "line_start": line_start,
                 "line_end": line_end,
             }
-            return {
-                "id": symbol_id,
-                "file_id": file_id,
-                "parent_id": self.stack[-1][0] if self.stack else None,
-                "name": name,
-                "qualified_name": qualified_name,
-                "kind": kind,
-                "line_start": line_start,
-                "line_end": line_end,
-                "line_count": line_end - line_start + 1,
-                "signature": signature,
-                "docstring": docstring,
-                "modifiers": str(modifiers) if modifiers else None,
-                "language": "python",
-                "base_classes": str(base_classes) if base_classes else None,
-                "is_test": is_test,
-            }
+            return self._container_symbol_dict(
+                symbol_id,
+                file_id,
+                name,
+                qualified_name,
+                kind,
+                line_start,
+                line_end,
+                signature,
+                docstring,
+                modifiers,
+                base_classes,
+                is_test,
+            )
 
     def _extract_import(self, node: Node, file_id: int) -> None:
         """Extract Import Statement."""
@@ -559,44 +682,16 @@ class PythonParser(ParserBase):
                 if imported_symbol is None:
                     continue
 
-                key = (import_path, imported_symbol)
-                if key in self.imports_snapshot:
-                    self.imports_snapshot[key]["seen"] = True
-                    if self.imports_snapshot[key]["line_number"] != line_number:
-                        import_id = self.imports_snapshot[key]["id"]
-                        self.imports.append(
-                            {
-                                "id": import_id,
-                                "file_id": file_id,
-                                "import_path": import_path,
-                                "imported_symbol": imported_symbol,
-                                "alias": alias,
-                                "line_number": line_number,
-                                "import_type": import_type,
-                                "import_scope": import_scope,
-                                "signature": signature,
-                            }
-                        )
-                else:
-                    import_id = self.assigner.reserve("imports", 1)[0]
-                    self.imports_snapshot[key] = {
-                        "id": import_id,
-                        "line_number": line_number,
-                        "seen": True,
-                    }
-                    self.imports.append(
-                        {
-                            "id": import_id,
-                            "file_id": file_id,
-                            "import_path": import_path,
-                            "imported_symbol": imported_symbol,
-                            "alias": alias,
-                            "line_number": line_number,
-                            "import_type": import_type,
-                            "import_scope": import_scope,
-                            "signature": signature,
-                        }
-                    )
+                self._record_import(
+                    file_id,
+                    import_path,
+                    imported_symbol,
+                    alias,
+                    line_number,
+                    import_type,
+                    import_scope,
+                    signature,
+                )
 
         elif node.type == "import_statement":
             import_type = "absolute"
@@ -625,44 +720,16 @@ class PythonParser(ParserBase):
                     continue
 
                 imported_symbol = ""
-                key = (import_path, imported_symbol)
-                if key in self.imports_snapshot:
-                    self.imports_snapshot[key]["seen"] = True
-                    if self.imports_snapshot[key]["line_number"] != line_number:
-                        import_id = self.imports_snapshot[key]["id"]
-                        self.imports.append(
-                            {
-                                "id": import_id,
-                                "file_id": file_id,
-                                "import_path": import_path,
-                                "imported_symbol": imported_symbol,
-                                "alias": alias,
-                                "line_number": line_number,
-                                "import_type": import_type,
-                                "import_scope": import_scope,
-                                "signature": signature,
-                            }
-                        )
-                else:
-                    import_id = self.assigner.reserve("imports", 1)[0]
-                    self.imports_snapshot[key] = {
-                        "id": import_id,
-                        "line_number": line_number,
-                        "seen": True,
-                    }
-                    self.imports.append(
-                        {
-                            "id": import_id,
-                            "file_id": file_id,
-                            "import_path": import_path,
-                            "imported_symbol": imported_symbol,
-                            "alias": alias,
-                            "line_number": line_number,
-                            "import_type": import_type,
-                            "import_scope": import_scope,
-                            "signature": signature,
-                        }
-                    )
+                self._record_import(
+                    file_id,
+                    import_path,
+                    imported_symbol,
+                    alias,
+                    line_number,
+                    import_type,
+                    import_scope,
+                    signature,
+                )
 
     def _extract_reference(self, node: Node, ref_kind: str, file_id: int) -> None:
         """Extract Reference (Call, Access, Type)."""
@@ -730,9 +797,9 @@ class PythonParser(ParserBase):
             suffix = target_name.split(".", 1)[1]
             first_seg, _, rest_after_first = suffix.partition(".")
             for entry in reversed(self.stack):
-                if entry[2] != "class":
+                if entry.kind != "class":
                     continue
-                class_qn = entry[1]
+                class_qn = entry.qualified_name
                 ctor_map = self._class_param_annos.get(class_qn)
                 if ctor_map and first_seg in ctor_map:
                     type_name = ctor_map[first_seg]
@@ -746,7 +813,7 @@ class PythonParser(ParserBase):
                 break
             else:
                 if self.stack:
-                    resolved_qualified = f"{self.stack[-1][1]}.{suffix}"
+                    resolved_qualified = f"{self.stack[-1].qualified_name}.{suffix}"
 
         # If it's a simple name, we can't resolve it yet, so keep raw
         # But if it's "module.func", we keep "module.func"
@@ -756,39 +823,13 @@ class PythonParser(ParserBase):
         )
         key = (ref_symbol_qualified_name, ref_kind, source_line)
         context = node.text.decode("utf-8") if node.text is not None else ""
-        if key in self.symbols_references_snapshot:
-            self.symbols_references_snapshot[key]["seen"] = True
-            if self.symbols_references_snapshot[key]["context"] != context:
-                symbol_reference_id = self.symbols_references_snapshot[key]["id"]
-                self.symbol_references.append(
-                    {
-                        "id": symbol_reference_id,
-                        "ref_symbol_name": target_name,
-                        "ref_symbol_qualified_name": ref_symbol_qualified_name,
-                        "source_file_id": file_id,
-                        "source_line": source_line,
-                        "ref_kind": ref_kind,
-                        "context": context,
-                    }
-                )
-                self.symbols_references_snapshot[key]["context"] = context
-        else:
-            symbol_reference_id = self.assigner.reserve("symbol_references", 1)[0]
-            self.symbols_references_snapshot[key] = {
-                "id": symbol_reference_id,
-                "source_line": source_line,
-                "context": context,
-                "seen": True,
-            }
-            self.symbol_references.append(
-                {
-                    "id": symbol_reference_id,
-                    "ref_symbol_name": target_name,
-                    "ref_symbol_qualified_name": ref_symbol_qualified_name,
-                    "source_file_id": file_id,
-                    "source_line": source_line,
-                    "ref_kind": ref_kind,
-                    "context": context,
-                }
-            )
+        self._record_symbol_reference(
+            file_id,
+            target_name,
+            ref_symbol_qualified_name,
+            source_line,
+            ref_kind,
+            context,
+            key,
+        )
         return
