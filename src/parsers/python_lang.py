@@ -236,7 +236,7 @@ class PythonParser(ParserBase):
         symbol_id = None
         scope_path = None
         pushed_stack = False
-        kind: str | None = None
+        kind: Optional[str] = None
         is_test: bool = False
 
         if node.type in (
@@ -325,8 +325,8 @@ class PythonParser(ParserBase):
         for ch in params.named_children:
             if ch.type != "typed_parameter":
                 continue
-            param_name: str | None = None
-            ann: Node | None = None
+            param_name: Optional[str] = None
+            ann: Optional[Node] = None
             for c in ch.children:
                 if c.type == "identifier" and param_name is None and c.text is not None:
                     param_name = c.text.decode("utf-8")
