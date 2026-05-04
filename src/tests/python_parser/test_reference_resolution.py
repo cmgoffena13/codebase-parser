@@ -12,11 +12,11 @@ def test_resolve_symbol_references_drops_unresolvable_type_annotations(tmp_db: C
         )
 
         # Stage a type annotation for builtin int. There is no corresponding symbol row
-        # with full_name='int', so resolve_symbol_references should not insert it.
+        # with ref_symbol_qualified_name='int', so resolve_symbol_references should not insert it.
         tmp_db.connection.execute(
             """
             INSERT INTO symbol_references_staging
-            (id, ref_symbol_name, ref_symbol_full_name, source_file_id, source_line, ref_kind, context)
+            (id, ref_symbol_name, ref_symbol_qualified_name, source_file_id, source_line, ref_kind, context)
             VALUES (1, 'int', 'int', 1, 1, 'type_annotation', 'int')
             """
         )
@@ -27,7 +27,7 @@ def test_resolve_symbol_references_drops_unresolvable_type_annotations(tmp_db: C
         """
         SELECT COUNT(*) AS c
         FROM symbol_references
-        WHERE ref_symbol_full_name = 'int' AND ref_kind = 'type_annotation'
+        WHERE ref_symbol_qualified_name = 'int' AND ref_kind = 'type_annotation'
         """
     ).fetchone()
     assert row["c"] == 0

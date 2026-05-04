@@ -5,10 +5,10 @@ from src.db import CodeDB
 from src.mcp.clip import clipped_doc_lines
 
 _SYMBOLS_SQL = """
-SELECT id, parent_id, kind, full_name, name, line_start, line_end, signature, docstring
+SELECT id, parent_id, kind, qualified_name, name, line_start, line_end, signature, docstring
 FROM symbols
 WHERE file_id = ?
-ORDER BY line_start, line_end, full_name
+ORDER BY line_start, line_end, qualified_name
 """
 
 _IMPORTS_SQL = """
@@ -63,7 +63,7 @@ def _symbol_branch_lines(
         connector = "└─ " if is_last else "├─ "
         loc = _line_span(row["line_start"], row["line_end"])
         child_name = (row["name"] or "").strip()
-        label = child_name if child_name else (row["full_name"] or "").strip()
+        label = child_name if child_name else (row["qualified_name"] or "").strip()
         lines.append(f"{branch_prefix}{connector}{loc}  {row['kind']}  {label}")
         detail_prefix = branch_prefix + ("    " if is_last else "│   ")
         lines.extend(_format_sig_doc(detail_prefix, row))
@@ -140,14 +140,16 @@ def get_file_overview(db: CodeDB, file_path: str) -> str:
         for row in sym_rows:
             children_by_parent_id[effective_parent_id(row)].append(row)
         for bucket in children_by_parent_id.values():
-            bucket.sort(key=lambda r: (r["line_start"], r["line_end"], r["full_name"]))
+            bucket.sort(
+                key=lambda r: (r["line_start"], r["line_end"], r["qualified_name"])
+            )
 
         roots = children_by_parent_id.get(None, ())
         for root_index, row in enumerate(roots):
             if root_index > 0:
                 lines_out.append("")
             loc = _line_span(row["line_start"], row["line_end"])
-            root_label = (row["name"] or row["full_name"] or "").strip()
+            root_label = (row["name"] or row["qualified_name"] or "").strip()
             lines_out.append(f"{loc}  {row['kind']}  {root_label}")
             lines_out.extend(_format_sig_doc("│   ", row))
             lines_out.extend(_symbol_branch_lines(children_by_parent_id, row["id"], ""))

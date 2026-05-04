@@ -95,7 +95,7 @@ class CodeDB:
         query = """
             SELECT
             id,
-            full_name AS name,
+            qualified_name AS name,
             kind,
             line_start,
             line_end
@@ -138,7 +138,7 @@ class CodeDB:
         query = """
         SELECT
         id,
-        ref_symbol_full_name AS name,
+        ref_symbol_qualified_name AS name,
         ref_kind,
         source_line,
         context
@@ -222,19 +222,19 @@ class CodeDB:
             self.connection.executemany(
                 """
                 INSERT OR REPLACE INTO symbols
-                (id, file_id, parent_id, name, full_name, kind, line_start, line_end, line_count, signature, docstring, modifiers, base_classes, language, is_test)
-                VALUES (:id, :file_id, :parent_id, :name, :full_name, :kind, :line_start, :line_end, :line_count, :signature, :docstring, :modifiers, :base_classes, :language, :is_test)
+                (id, file_id, parent_id, name, qualified_name, kind, line_start, line_end, line_count, signature, docstring, modifiers, base_classes, language, is_test)
+                VALUES (:id, :file_id, :parent_id, :name, :qualified_name, :kind, :line_start, :line_end, :line_count, :signature, :docstring, :modifiers, :base_classes, :language, :is_test)
                 """,
                 symbols,
             )
 
             fts_symbols = [
-                (s["id"], s["full_name"], s["docstring"], s["signature"])
+                (s["id"], s["qualified_name"], s["docstring"], s["signature"])
                 for s in symbols
             ]
             self.connection.executemany(
                 """
-                INSERT OR REPLACE INTO symbols_fts (rowid, full_name, docstring, signature)
+                INSERT OR REPLACE INTO symbols_fts (rowid, qualified_name, docstring, signature)
                 VALUES (?, ?, ?, ?)
                 """,
                 fts_symbols,
@@ -243,8 +243,8 @@ class CodeDB:
             self.connection.executemany(
                 """
                 INSERT INTO symbol_references_staging
-                (id, ref_symbol_name, ref_symbol_full_name, source_file_id, source_line, ref_kind, context)
-                VALUES (:id, :ref_symbol_name, :ref_symbol_full_name, :source_file_id, :source_line, :ref_kind, :context)
+                (id, ref_symbol_name, ref_symbol_qualified_name, source_file_id, source_line, ref_kind, context)
+                VALUES (:id, :ref_symbol_name, :ref_symbol_qualified_name, :source_file_id, :source_line, :ref_kind, :context)
                 """,
                 symbol_references,
             )
@@ -262,20 +262,20 @@ class CodeDB:
         with self.connection:
             self.connection.execute("""
             INSERT INTO symbol_references
-            (id, ref_symbol_id, ref_symbol_file_id, ref_symbol_name, ref_symbol_full_name, source_file_id, source_line, ref_kind, context)
+            (id, ref_symbol_id, ref_symbol_file_id, ref_symbol_name, ref_symbol_qualified_name, source_file_id, source_line, ref_kind, context)
             SELECT
             s.id,
             sy.id AS ref_symbol_id,
             sy.file_id AS ref_symbol_file_id,
             s.ref_symbol_name,
-            s.ref_symbol_full_name,
+            s.ref_symbol_qualified_name,
             s.source_file_id,
             s.source_line,
             s.ref_kind,
             s.context
             FROM symbol_references_staging AS s
             INNER JOIN symbols AS sy
-                ON s.ref_symbol_full_name = sy.full_name
+                ON s.ref_symbol_qualified_name = sy.qualified_name
             WHERE NOT EXISTS (SELECT 1 FROM symbol_references AS sr WHERE sr.id = s.id);
             """)
             self.connection.execute("DELETE FROM symbol_references_staging;")

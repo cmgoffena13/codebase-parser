@@ -73,7 +73,11 @@ def f(
     )
 
     assert len(ref1) == len(ref2)
-    keys1 = {(r["ref_symbol_full_name"], r["ref_kind"], r["source_line"]) for r in ref1}
-    keys2 = {(r["ref_symbol_full_name"], r["ref_kind"], r["source_line"]) for r in ref2}
+    keys1 = {
+        (r["ref_symbol_qualified_name"], r["ref_kind"], r["source_line"]) for r in ref1
+    }
+    keys2 = {
+        (r["ref_symbol_qualified_name"], r["ref_kind"], r["source_line"]) for r in ref2
+    }
     assert len(keys1) == len(ref1)
     assert len(keys2) == len(ref2)

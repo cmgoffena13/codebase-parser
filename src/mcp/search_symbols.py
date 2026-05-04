@@ -6,7 +6,7 @@ from src.mcp.clip import clipped_doc_lines
 
 _SYMBOL_SEARCH_SQL = """
 SELECT
-    s.full_name,
+    s.qualified_name,
     s.kind,
     s.signature,
     s.docstring,
@@ -63,7 +63,7 @@ def _sig_doc_lines(detail_prefix: str, sig: str, doc: str) -> list[str]:
 def search_symbols(db: CodeDB, query: str, limit: int = 20) -> str:
     """
     Search indexed symbols via ``symbols_fts``. Returns a tree grouped by file so a
-    caller can pick a ``full_name`` for follow-up (e.g. ``get_context``).
+    caller can pick a ``qualified_name`` for follow-up (e.g. ``get_context``).
     """
     stripped = query.strip()
     if not stripped:
@@ -106,14 +106,14 @@ def search_symbols(db: CodeDB, query: str, limit: int = 20) -> str:
             connector = "└─ " if is_last else "├─ "
             detail_prefix = "    " if is_last else "│   "
 
-            full_name = row["full_name"] or ""
+            qualified_name = row["qualified_name"] or ""
             kind = row["kind"] or ""
             loc = _line_span(row["line_start"], row["line_end"]).ljust(max_loc)
             kind_padded = kind.ljust(max_kind)
             sig = row["signature"] or ""
             doc_raw = row["docstring"] or ""
 
-            lines.append(f"{connector}{loc}  {kind_padded}  {full_name}")
+            lines.append(f"{connector}{loc}  {kind_padded}  {qualified_name}")
             lines.extend(_sig_doc_lines(detail_prefix, sig, doc_raw))
 
     return "\n".join(lines).rstrip() + "\n"

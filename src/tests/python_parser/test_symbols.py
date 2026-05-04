@@ -40,7 +40,7 @@ def test_python_fixture_file_parses_symbols_imports_and_references(
     assert by_qn["fake_path"]["kind"] == "variable"
     assert by_qn["alias_variable_in_another_file"]["kind"] == "variable"
     assert by_qn["FakeClass.fake_data"]["name"] == "self.fake_data"
-    assert by_qn["FakeClass.fake_data"]["full_name"] == "FakeClass.fake_data"
+    assert by_qn["FakeClass.fake_data"]["qualified_name"] == "FakeClass.fake_data"
 
     # Signatures are normalized to one line
     fake_fn = index_symbols(symbols)["fake_function"]

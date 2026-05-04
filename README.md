@@ -44,7 +44,7 @@ Fields:
 - file_id: 
 - parent_id: classid or functionid
 - name: `node.child_by_field_name('name').text`
-- full_name: dotted path for lookup (same as former qualified_name; unique per index)
+- qualified_name: dotted path for lookup (unique per index)
 - signature: `node.text` - API Surface
 - docstring: `node.child_by_field_name('body') → Find first string node`
 - modifiers: iterate node.children for decorator nodes. Ouputs as array ex. `["@login_required"]`
@@ -63,7 +63,7 @@ Example Record in Paser:
 {
   "file_id": 123,
   "name": "calculate_total",
-  "full_name": "OrderService.calculate_total",
+  "qualified_name": "OrderService.calculate_total",
   "kind": "method",
   "line_start": 45,
   "line_end": 52,
@@ -107,7 +107,7 @@ How do we maintain the symbols, imports, and references of a file?
 - Before we parse a file, query for the last snapshot of the symbols using file path.
     - Snapshot Fields Needed:
         - id - to reuse
-        - full_name - lookup key (dotted path; unique with kind in parser snapshot)
+        - qualified_name - lookup key (dotted path; unique with kind in parser snapshot)
         - kind - lookup key (make sure its `action` the function rather than `action` the variable)
         - line_start - to detect change and update
         - line_end - to detect change and update
@@ -121,7 +121,7 @@ How do we maintain the symbols, imports, and references of a file?
         - id - to reuse
         - ref_symbol_id - only for conditional logic
         - ref_symbol_name - surface text at the reference site
-        - ref_symbol_full_name - resolved target (joins to ``symbols.full_name`` when resolvable)
+        - ref_symbol_qualified_name - resolved target (joins to ``symbols.qualified_name`` when resolvable)
         - ref_kind - lookup key
         - source_line - to detect change and update
     NOTE: Very specific logic here for the lookup. If NOT FOUND, its gotta go in the staging table.
