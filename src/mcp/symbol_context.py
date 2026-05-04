@@ -43,6 +43,12 @@ def _truncate_context(text: str, max_len: int = _MAX_REFERENCE_CONTEXT) -> str:
     return t
 
 
+def _definition_gutter_width(line_start: int, line_count: int) -> int:
+    if line_count <= 0:
+        return len(str(line_start))
+    return len(str(line_start + line_count - 1))
+
+
 def get_symbol_context(db: CodeDB, full_name: str) -> str:
     """
     Return symbol metadata, source for the indexed span, and reference subsections
@@ -72,8 +78,10 @@ def get_symbol_context(db: CodeDB, full_name: str) -> str:
             if not chunk:
                 body_lines.append("    (no lines in range)")
             else:
-                for ln in chunk:
-                    body_lines.append(f"    {ln}")
+                gutter = _definition_gutter_width(line_start, len(chunk))
+                for index, ln in enumerate(chunk):
+                    lineno = line_start + index
+                    body_lines.append(f"  {lineno:>{gutter}}  {ln}")
     except OSError as e:
         body_lines.append(f"    (could not read source file: {e})")
 
