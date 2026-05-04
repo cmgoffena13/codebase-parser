@@ -13,7 +13,7 @@ def test_python_fixture_file_parses_symbols_imports_and_references(
     file_bytes = fixture_bytes("file.py")
     symbols, imports, references = python_parser.parse(1, file_bytes)
 
-    assert len(symbols) == 11
+    assert len(symbols) == 12
     assert len(imports) == 3
     assert len(references) == 6
     assert_symbols_invariants(symbols)
@@ -29,6 +29,7 @@ def test_python_fixture_file_parses_symbols_imports_and_references(
     assert "FakeClass.fake_property" in qn
 
     # Function + nested function
+    assert "_noop_deco" in qn
     assert "fake_function" in qn
     assert "fake_function.nested_fake_function" in qn
 
@@ -60,10 +61,12 @@ def test_python_fixture_file_parses_symbols_imports_and_references(
 
     # Decorators: line_start / signature include the decorated span; modifiers list kept.
     fake_prop = index_symbols(symbols)["FakeClass.fake_property"]
-    assert fake_prop["line_start"] == 36  # @property line in file.py fixture
+    assert fake_prop["line_start"] == 40  # first @_noop_deco line in file.py fixture
+    assert "@_noop_deco" in fake_prop["signature"]
     assert "@property" in fake_prop["signature"]
     assert "def fake_property" in fake_prop["signature"]
     assert fake_prop["modifiers"] is not None
+    assert "_noop_deco" in fake_prop["modifiers"]
     assert "property" in fake_prop["modifiers"]
 
 

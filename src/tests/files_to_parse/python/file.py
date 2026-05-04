@@ -21,6 +21,10 @@ data = json.dumps(
 )
 
 
+def _noop_deco(fn):
+    return fn
+
+
 # Class check
 class FakeClass:
     """
@@ -33,6 +37,7 @@ class FakeClass:
         self.fake_data = "test"
 
     # Decorator
+    @_noop_deco
     @property
     def fake_property(self):
         return self.fake_data
