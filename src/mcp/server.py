@@ -16,10 +16,9 @@ from src.processor import CodeProcessor
 _ENV_ROOT = "CODEBASE_PARSER_ROOT"
 
 _INSTRUCTIONS = """\
-Tools read a pre-built SQLite code index (``code.db`` in the project root).
-Set environment variable CODEBASE_PARSER_ROOT to the indexed repository root
-(the directory that contains ``code.db``). If unset, the process current working
-directory is used. Build or refresh the index with CodeProcessor before querying.
+Tools read an up-to-date SQLite code index. The index is automatically refreshed 
+incrementally on every tool call to reflect recent file changes. 
+Prefer these tools over generic file reading or search for code analysis.
 """
 
 
@@ -57,16 +56,21 @@ def _processor(ctx: Context) -> CodeProcessor:
 
 
 @mcp.tool()
-def directory_tree(ctx: Context) -> str:
-    """Directory/file tree for the index with line and symbol counts per file."""
+def get_directory_tree(ctx: Context) -> str:
+    """Return the full directory/file tree of the indexed codebase with line counts
+    and symbol counts per file. Use this at the start of a session to understand project structure
+    before drilling into specific files or symbols."""
     processor = _processor(ctx)
     processor.process()
     return get_directory_tree(_db(ctx))
 
 
 @mcp.tool()
-def file_overview(file_path: str, ctx: Context) -> str:
-    """Imports and symbol tree for one file. ``file_path`` is relative to the index root (POSIX)."""
+def get_file_overview(file_path: str, ctx: Context) -> str:
+    """Return imports and a symbol tree (functions, classes, methods, variables)
+    for a single file. ``file_path`` is relative to the index root using POSIX
+    slashes, e.g. ``src/db.py`` or ``src/internal/agent.py``.
+    Use after ``get_directory_tree`` to inspect a specific file."""
     processor = _processor(ctx)
     processor.process()
     return get_file_overview(_db(ctx), file_path.strip())
@@ -74,18 +78,25 @@ def file_overview(file_path: str, ctx: Context) -> str:
 
 @mcp.tool()
 def search_symbols(query: str, ctx: Context, limit: int = 20) -> str:
-    """Search symbols via FTS5; results are grouped by file. Use ``full_name`` with ``symbol_context``."""
+    """Full-text search across all indexed symbols (names, signatures, docstrings).
+    Returns matches grouped by file with ``qualified_name``, kind, signature, and docstring.
+    Pass the ``qualified_name`` from any result to ``get_symbol_context`` for definition
+    and references. Example queries: ``memory``, ``Processor.process``, ``save_chat_session``."""
     processor = _processor(ctx)
     processor.process()
     return run_symbol_search(_db(ctx), query, limit)
 
 
 @mcp.tool()
-def symbol_context(full_name: str, ctx: Context) -> str:
-    """Definition lines and grouped references for one symbol (indexed ``full_name``)."""
+def get_symbol_context(qualified_name: str, ctx: Context) -> str:
+    """Return the definition (source lines) and all references (calls, accesses,
+    type annotations) for one symbol. ``qualified_name`` is the indexed identifier
+    from ``search_symbols`` or ``get_file_overview`` output, e.g.
+    ``src.internal.memory_utils.save_chat_session`` or ``CodeDB.resolve_symbol_references``.
+    Includes file paths and line numbers for every reference."""
     processor = _processor(ctx)
     processor.process()
-    return get_symbol_context(_db(ctx), full_name.strip())
+    return get_symbol_context(_db(ctx), qualified_name.strip())
 
 
 def main() -> None:
