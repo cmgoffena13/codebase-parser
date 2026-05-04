@@ -19,7 +19,7 @@ def main():
     print("--------------------------------")
     print(get_file_overview(db, "src/mcp/directory_tree.py"))
     print("--------------------------------")
-    print(search_symbols(db, "symbol"))
+    print(search_symbols(db, "import"))
     print("--------------------------------")
     print(get_symbol_context(db, "CodeDB.delete_symbol_references"))
 
