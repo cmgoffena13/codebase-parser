@@ -21,7 +21,7 @@ def main():
     print("--------------------------------")
     print(search_symbols(db, "symbol"))
     print("--------------------------------")
-    print(get_symbol_context(db, "CodeProcessor._process_file"))
+    print(get_symbol_context(db, "CodeDB.delete_symbol_references"))
 
 
 if __name__ == "__main__":

@@ -208,4 +208,6 @@ class CodeProcessor:
 
         duration = time_now - start_time
         duration_ms = duration * 1000
-        print(f"Indexed {self.files_indexed} files in {duration_ms:.2f} ms")
+        print(
+            f"Indexed {self.files_indexed} files in {duration_ms:.2f} ms (files_skipped: {self.files_skipped})"
+        )
