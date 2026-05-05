@@ -26,7 +26,8 @@ testpaths = [ "src/tests" ]
 pythonpath = [ "." ]
 
 [tool.ruff]
-lint.select = ["I"]
+lint.extend-select = ["B", "I"]
+extend-exclude = ["src/tests/files_to_parse/"]
 
 [tool.ty.src]
 exclude = ["src/tests/files_to_parse/"]

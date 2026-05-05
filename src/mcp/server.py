@@ -7,10 +7,10 @@ from typing import Any
 from mcp.server.fastmcp import Context, FastMCP
 
 from src.db import CodeDB
-from src.mcp.directory_tree import get_directory_tree
-from src.mcp.file_overview import get_file_overview
+from src.mcp.directory_tree import get_directory_tree as run_directory_tree
+from src.mcp.file_overview import get_file_overview as run_file_overview
 from src.mcp.search_symbols import search_symbols as run_symbol_search
-from src.mcp.symbol_context import get_symbol_context
+from src.mcp.symbol_context import get_symbol_context as run_symbol_context
 from src.processor import CodeProcessor
 
 _ENV_ROOT = "CODEBASE_PARSER_ROOT"
@@ -62,7 +62,7 @@ def get_directory_tree(ctx: Context) -> str:
     before drilling into specific files or symbols."""
     processor = _processor(ctx)
     processor.process()
-    return get_directory_tree(_db(ctx))
+    return run_directory_tree(_db(ctx))
 
 
 @mcp.tool()
@@ -73,7 +73,7 @@ def get_file_overview(file_path: str, ctx: Context) -> str:
     Use after ``get_directory_tree`` to inspect a specific file."""
     processor = _processor(ctx)
     processor.process()
-    return get_file_overview(_db(ctx), file_path.strip())
+    return run_file_overview(_db(ctx), file_path.strip())
 
 
 @mcp.tool()
@@ -96,7 +96,7 @@ def get_symbol_context(qualified_name: str, ctx: Context) -> str:
     Includes file paths and line numbers for every reference."""
     processor = _processor(ctx)
     processor.process()
-    return get_symbol_context(_db(ctx), qualified_name.strip())
+    return run_symbol_context(_db(ctx), qualified_name.strip())
 
 
 def main() -> None:
