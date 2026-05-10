@@ -90,7 +90,7 @@ def search_symbols(db: CodeDB, query: str, limit: int = 20) -> str:
 
     lines: list[str] = [
         "Legend: L = Line, Sig = Signature, Doc = Docstring\n",
-        f'Results for "{stripped}" ({len(rows)} matches)',
+        f'Search results for "{stripped}" ({len(rows)} matches)',
         "",
     ]
 
