@@ -17,7 +17,7 @@ def main():
     processor.process(full=True)
     print(get_directory_tree(db))
     print("--------------------------------")
-    print(get_file_overview(db, "src/mcp/directory_tree.py"))
+    print(get_file_overview(db, "src/db.py"))
     print("--------------------------------")
     print(search_symbols(db, "git"))
     print("--------------------------------")
