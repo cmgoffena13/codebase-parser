@@ -19,9 +19,9 @@ def main():
     print("--------------------------------")
     print(get_file_overview(db, "src/mcp/directory_tree.py"))
     print("--------------------------------")
-    print(search_symbols(db, "import"))
+    print(search_symbols(db, "git"))
     print("--------------------------------")
-    print(get_symbol_context(db, "CodeDB.delete_symbol_references"))
+    print(get_symbol_context(db, "path_spec_for_indexing"))
 
 
 if __name__ == "__main__":
