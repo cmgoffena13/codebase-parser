@@ -14,3 +14,6 @@ install:
 
 test:
 	uv run -- pytest -v -n auto
+
+upgrade:
+	uv sync --upgrade --all-extras
