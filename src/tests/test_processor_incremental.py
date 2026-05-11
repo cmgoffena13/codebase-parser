@@ -10,6 +10,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from src.db import CodeDB  # noqa: E402
 from src.processor import CodeProcessor  # noqa: E402
+from src.utils import db_path_for_index_root  # noqa: E402
 
 # Nested package + class + method + call so an unchanged outer def must still
 # push the parser stack (regression for snapshot/re-parse churn).
@@ -22,7 +23,7 @@ class Outer:
 
 
 def _db_counts(tmp: Path) -> dict:
-    db_file = tmp / "code.db"
+    db_file = db_path_for_index_root(tmp)
     conn = sqlite3.connect(str(db_file))
     conn.row_factory = sqlite3.Row
     try:

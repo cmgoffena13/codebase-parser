@@ -73,7 +73,7 @@ def test_processor_prunes_ignored_dirs_and_files(tmp_path: Path) -> None:
     db = CodeDB(tmp_path)
     CodeProcessor(db, tmp_path).process(full=True)
 
-    conn = sqlite3.connect(str(tmp_path / "code.db"))
+    conn = sqlite3.connect(str(db.db_file))
     try:
         paths = [r[0] for r in conn.execute("SELECT path FROM files").fetchall()]
     finally:

@@ -14,6 +14,18 @@ from src.db import CodeDB  # noqa: E402
 from src.parsers.factory import ParserFactory  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _isolate_codebase_parser_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep index DBs under this test's tmp dir (see ``utils.get_codebase_parser_config_dir``)."""
+    monkeypatch.setenv(
+        "CODEBASE_PARSER_CONFIG_DIR",
+        str(tmp_path / "codebase-parser-config"),
+    )
+
+
 @pytest.fixture
 def tmp_db(tmp_path: Path) -> CodeDB:
     return CodeDB(tmp_path)

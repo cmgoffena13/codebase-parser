@@ -2,6 +2,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Optional
 
+from src.utils import db_path_for_index_root
+
 TABLE_BATCH_MAP = {
     "directories",
     "files",
@@ -14,7 +16,7 @@ TABLE_BATCH_MAP = {
 class CodeDB:
     def __init__(self, root: Path):
         self.root = root.resolve()
-        self.db_file = self.root / "code.db"
+        self.db_file = db_path_for_index_root(self.root)
         self.connection = sqlite3.connect(str(self.db_file), check_same_thread=False)
         self.connection.row_factory = sqlite3.Row
         self.connection_closed = False
