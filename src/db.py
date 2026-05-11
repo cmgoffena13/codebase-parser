@@ -42,10 +42,9 @@ class CodeDB:
         query = f"DELETE FROM {table} WHERE id IN ({placeholders})"  # noqa: S608
         self.exec_tran(query, tuple(ids))
 
-    def exec_query(self, query: str, params: tuple) -> sqlite3.Row:
-        if params:
-            query = query.format(*params)
-        return self.connection.execute(query).fetchone()
+    def table_max_id(self, table: str) -> int:
+        q = f"SELECT COALESCE(MAX(id), 0) AS max_id FROM {table}"  # noqa: S608
+        return int(self.connection.execute(q).fetchone()["max_id"])
 
     def get_watermark(self) -> tuple[int, int]:
         row = self.connection.execute(

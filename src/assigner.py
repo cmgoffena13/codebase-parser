@@ -1,6 +1,6 @@
 import threading
 
-from src.db import CodeDB
+from src.db import TABLE_BATCH_MAP, CodeDB
 
 
 class GlobalIDAssigner:
@@ -8,13 +8,7 @@ class GlobalIDAssigner:
         self._counters = {}
         self._lock = threading.Lock()
         self.db = db
-        self.tables = {
-            "directories",
-            "files",
-            "symbols",
-            "symbol_references",
-            "imports",
-        }
+        self.tables = TABLE_BATCH_MAP
         self._get_starter_ids()
 
     def _init_table(self, table: str, start_id: int):
@@ -22,10 +16,7 @@ class GlobalIDAssigner:
 
     def _get_starter_ids(self) -> None:
         for table in self.tables:
-            row = self.db.exec_query(
-                "SELECT COALESCE(MAX(id), 0) AS max_id FROM ?", (table,)
-            )
-            self._init_table(table, row["max_id"] + 1)
+            self._init_table(table, self.db.table_max_id(table) + 1)
 
     def reserve(self, table: str, count: int) -> tuple[int, ...]:
         with self._lock:
