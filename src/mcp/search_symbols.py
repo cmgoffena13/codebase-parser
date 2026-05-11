@@ -29,7 +29,7 @@ _MAX_DOCSTRING_CHARS = 100
 def _line_span(line_start: int, line_end: int) -> str:
     if line_start == line_end:
         return f"L{line_start}"
-    return f"L{line_start}–{line_end}"
+    return f"L{line_start}-{line_end}"
 
 
 def build_fts_query(user_input: str) -> str:

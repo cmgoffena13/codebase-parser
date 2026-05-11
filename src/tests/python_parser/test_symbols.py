@@ -57,7 +57,8 @@ def test_python_fixture_file_parses_symbols_imports_and_references(
     assert (
         "This is a fake class with a multi line docstring." in fake_class["docstring"]
     )
-    assert fake_fn["docstring"] and "Fake Function Docstring" in fake_fn["docstring"]
+    assert fake_fn["docstring"]
+    assert "Fake Function Docstring" in fake_fn["docstring"]
 
     # Decorators: line_start / signature include the decorated span; modifiers list kept.
     fake_prop = index_symbols(symbols)["FakeClass.fake_property"]

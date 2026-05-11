@@ -8,14 +8,15 @@ def index_symbols(symbols: list[dict]) -> dict:
 
 def assert_reference_shape(ref: dict, expected_file_id: int) -> None:
     assert ref["ref_kind"] in {"call", "access", "type_annotation"}
-    assert isinstance(ref["ref_symbol_name"], str) and ref["ref_symbol_name"]
-    assert (
-        isinstance(ref["ref_symbol_qualified_name"], str)
-        and ref["ref_symbol_qualified_name"]
-    )
+    assert isinstance(ref["ref_symbol_name"], str)
+    assert ref["ref_symbol_name"]
+    assert isinstance(ref["ref_symbol_qualified_name"], str)
+    assert ref["ref_symbol_qualified_name"]
     assert ref["source_file_id"] == expected_file_id
-    assert isinstance(ref["source_line"], int) and ref["source_line"] >= 1
-    assert isinstance(ref["context"], str) and ref["context"]
+    assert isinstance(ref["source_line"], int)
+    assert ref["source_line"] >= 1
+    assert isinstance(ref["context"], str)
+    assert ref["context"]
 
 
 def assert_symbol_references_invariants(references: list[dict]) -> None:

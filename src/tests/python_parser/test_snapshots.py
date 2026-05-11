@@ -8,7 +8,7 @@ from src.tests.python_parser._assertions import (
 
 
 @pytest.mark.parametrize(
-    "fixture_name,file_id,expected_counts",
+    ("fixture_name", "file_id", "expected_counts"),
     [
         ("file.py", 1, (12, 3, 4)),
         ("another_file.py", 2, (4, 1, 2)),

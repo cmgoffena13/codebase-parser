@@ -1,8 +1,11 @@
+from typing import ClassVar
+
 import tree_sitter_python as python_language
 from tree_sitter import Language, Parser
 
 from src.assigner import GlobalIDAssigner
 from src.db import CodeDB
+from src.parsers.base import ParserBase
 from src.parsers.python_lang import PythonParser
 
 FILE_EXTENSION_MAPPING = {
@@ -11,13 +14,13 @@ FILE_EXTENSION_MAPPING = {
 
 
 class ParserFactory:
-    tree_sitter_parsers = {
+    tree_sitter_parsers: ClassVar[dict[str, Parser]] = {
         "python": Parser(Language(python_language.language())),
     }
-    parsers = {
+    parsers: ClassVar[dict[str, type[ParserBase]]] = {
         "python": PythonParser,
     }
-    active_tree_sitter_parsers = {}
+    active_tree_sitter_parsers: ClassVar[dict[str, Parser]] = {}
 
     @classmethod
     def get_parser(

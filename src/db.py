@@ -22,7 +22,7 @@ class CodeDB:
 
     def _apply_schema(self):
         schema_path = Path(__file__).resolve().parent / "schema.sql"
-        with open(schema_path, "r") as f:
+        with schema_path.open("r", encoding="utf-8") as f:
             self.connection.executescript(f.read())
 
     def exec_tran(self, query: str, params: tuple) -> None:
@@ -36,13 +36,16 @@ class CodeDB:
     def delete_ids(self, table: str, ids: list[int]) -> None:
         if not ids:
             return
+        if table not in TABLE_BATCH_MAP:
+            raise ValueError(f"unsupported table for delete_ids: {table}")
         placeholders = ",".join(["?"] * len(ids))
-        query = f"DELETE FROM {table} WHERE id IN ({placeholders})"
+        query = f"DELETE FROM {table} WHERE id IN ({placeholders})"  # noqa: S608
         self.exec_tran(query, tuple(ids))
 
-    def exec_query(self, query: str) -> sqlite3.Row:
-        row = self.connection.execute(query).fetchone()
-        return row
+    def exec_query(self, query: str, params: tuple) -> sqlite3.Row:
+        if params:
+            query = query.format(*params)
+        return self.connection.execute(query).fetchone()
 
     def get_watermark(self) -> tuple[int, int]:
         row = self.connection.execute(
@@ -66,7 +69,7 @@ class CodeDB:
         return {Path(row["path"]): {"id": row["id"], "seen": False} for row in cursor}
 
     def delete_directories(self, directories: dict[Path, dict[str, Any]]) -> None:
-        dir_ids = [dir["id"] for dir in directories.values() if not dir["seen"]]
+        dir_ids = [d["id"] for d in directories.values() if not d["seen"]]
         self.delete_ids("directories", dir_ids)
 
     def get_files_snapshot(self) -> dict[Path, dict[str, Any]]:
@@ -123,12 +126,14 @@ class CodeDB:
             return
         with self.connection:
             ids_placeholder = ",".join(["?"] * len(symbol_ids))
+            symbols_stmt = "DELETE FROM symbols WHERE id IN"
+            fts_stmt = "DELETE FROM symbols_fts WHERE rowid IN"
             self.connection.execute(
-                f"""DELETE FROM symbols WHERE id IN ({ids_placeholder})""",
+                f"{symbols_stmt} ({ids_placeholder})",
                 symbol_ids,
             )
             self.connection.execute(
-                f"""DELETE FROM symbols_fts WHERE rowid IN ({ids_placeholder})""",
+                f"{fts_stmt} ({ids_placeholder})",
                 symbol_ids,
             )
 

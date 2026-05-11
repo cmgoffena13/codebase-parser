@@ -625,15 +625,12 @@ class PythonParser(ParserBase):
         parent_is_test = self.stack[-1].is_test if self.stack else False
         is_test = False
         # Pytest
-        if kind == "function" and name.startswith("test_"):
-            is_test = True
-        elif kind == "class" and name.startswith("Test"):
-            is_test = True
-        # Unittest
-        elif kind == "class" and any("TestCase" in bc for bc in base_classes):
-            is_test = True
-        # Method inside a test class
-        elif kind == "method" and name.startswith("test_") and parent_is_test:
+        if (
+            (kind == "function" and name.startswith("test_"))
+            or (kind == "class" and name.startswith("Test"))
+            or (kind == "class" and any("TestCase" in bc for bc in base_classes))
+            or (kind == "method" and name.startswith("test_") and parent_is_test)
+        ):
             is_test = True
 
         symbol_identity = scope_path if scope_path is not None else name
@@ -665,28 +662,27 @@ class PythonParser(ParserBase):
                     is_test,
                 )
             return None
-        else:
-            symbol_id = self.assigner.reserve("symbols", 1)[0]
-            self.symbols_snapshot[key] = {
-                "id": symbol_id,
-                "seen": True,
-                "line_start": line_start,
-                "line_end": line_end,
-            }
-            return self._container_symbol_dict(
-                symbol_id,
-                file_id,
-                name,
-                qualified_name,
-                kind,
-                line_start,
-                line_end,
-                signature,
-                docstring,
-                modifiers,
-                base_classes,
-                is_test,
-            )
+        symbol_id = self.assigner.reserve("symbols", 1)[0]
+        self.symbols_snapshot[key] = {
+            "id": symbol_id,
+            "seen": True,
+            "line_start": line_start,
+            "line_end": line_end,
+        }
+        return self._container_symbol_dict(
+            symbol_id,
+            file_id,
+            name,
+            qualified_name,
+            kind,
+            line_start,
+            line_end,
+            signature,
+            docstring,
+            modifiers,
+            base_classes,
+            is_test,
+        )
 
     def _extract_import(self, node: Node, file_id: int) -> None:
         """Extract Import Statement."""

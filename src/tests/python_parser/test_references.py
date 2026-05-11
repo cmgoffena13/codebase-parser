@@ -25,7 +25,7 @@ def test_stdlib_import_and_literal_calls_filtered_from_references(
 ):
     """Path(...) and str.join skipped; project name like files kept."""
     file_bytes = fixture_bytes("external_refs_filter.py")
-    symbols, imports, references = python_parser.parse(41, file_bytes)
+    _, _, references = python_parser.parse(41, file_bytes)
 
     assert_symbol_references_invariants(references)
     assert not any(

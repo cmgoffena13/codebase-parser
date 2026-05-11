@@ -31,10 +31,10 @@ _REF_KIND_SECTIONS: tuple[tuple[str, str], ...] = (
 
 
 def _lines_range_header(line_start: int, line_end: int) -> str:
-    """Human range for the header line (e.g. ``145–148`` or ``145``)."""
+    """Human range for the header line (e.g. ``145-148`` or ``145``)."""
     if line_start == line_end:
         return str(line_start)
-    return f"{line_start}–{line_end}"
+    return f"{line_start}-{line_end}"
 
 
 def _format_reference_context(text: str, max_len: int = _MAX_REFERENCE_CONTEXT) -> str:

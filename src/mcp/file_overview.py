@@ -25,7 +25,7 @@ _MAX_DOCSTRING_CHARS = 100
 def _line_span(line_start: int, line_end: int) -> str:
     if line_start == line_end:
         return f"L{line_start}"
-    return f"L{line_start}–{line_end}"
+    return f"L{line_start}-{line_end}"
 
 
 def _format_sig_doc(detail_prefix: str, row) -> list[str]:

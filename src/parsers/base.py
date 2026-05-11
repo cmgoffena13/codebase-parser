@@ -10,6 +10,7 @@ class ParserBase:
     def __init__(self, assigner: GlobalIDAssigner, db: CodeDB, parser: Parser):
         self.assigner = assigner
         self.db = db
+        self.parser = parser
         self.symbols_snapshot = {}
         self.stack: List[Tuple[int, str, str]] = []
         self.symbols: List[Dict] = []

@@ -18,7 +18,7 @@ class CodeProcessor:
         self._index_ignore_spec = path_spec_for_indexing(self.root)
         self.last_full_parse, self.last_incremental = self.db.get_watermark()
         self.db_batch_size = 1000
-        self.db_batches: dict[str, list[dict]] = dict()
+        self.db_batches: dict[str, list[dict]] = {}
         for table in TABLE_BATCH_MAP:
             self.db_batches[table] = []
 
@@ -146,14 +146,13 @@ class CodeProcessor:
             self._process_file(file_name, directory_path, full)
 
     def _insert_batch(self, final: bool = False) -> None:
-        if not final:
-            if not any(
-                len(batch) >= self.db_batch_size for batch in self.db_batches.values()
-            ):
-                return
+        if not final and not any(
+            len(batch) >= self.db_batch_size for batch in self.db_batches.values()
+        ):
+            return
 
         self.db.bulk_insert(self.db_batches)
-        self.db_batches = dict()
+        self.db_batches = {}
         for table in TABLE_BATCH_MAP:
             self.db_batches[table] = []
 
@@ -167,10 +166,10 @@ class CodeProcessor:
         for directory_path, directory_names, file_names in os.walk(self.root):
             directory_path = Path(directory_path)
             directory_names[:] = [
-                dir
-                for dir in directory_names
+                directory
+                for directory in directory_names
                 if not relative_path_is_ignored(
-                    (directory_path / dir).relative_to(self.root),
+                    (directory_path / directory).relative_to(self.root),
                     is_directory=True,
                     spec=self._index_ignore_spec,
                 )

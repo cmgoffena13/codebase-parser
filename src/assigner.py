@@ -23,7 +23,7 @@ class GlobalIDAssigner:
     def _get_starter_ids(self) -> None:
         for table in self.tables:
             row = self.db.exec_query(
-                f"SELECT COALESCE(MAX(id), 0) AS max_id FROM {table}"
+                "SELECT COALESCE(MAX(id), 0) AS max_id FROM ?", (table,)
             )
             self._init_table(table, row["max_id"] + 1)
 

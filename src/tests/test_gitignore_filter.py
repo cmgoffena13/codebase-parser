@@ -20,7 +20,7 @@ from src.processor import CodeProcessor  # noqa: E402
 
 def test_relative_path_rejects_absolute() -> None:
     spec = PathSpec.from_lines("gitignore", [])
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="relative path must not be absolute"):
         relative_path_is_ignored(Path("/abs/foo.py"), False, spec)
 
 

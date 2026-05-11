@@ -26,8 +26,27 @@ testpaths = [ "src/tests" ]
 pythonpath = [ "." ]
 
 [tool.ruff]
-lint.extend-select = ["B", "I"]
+target-version = "py312"
 extend-exclude = ["src/tests/files_to_parse/"]
+lint.extend-select = [
+    "A",     # Builtins
+    "DTZ",   # Datetime
+    "SIM",   # Simplify
+    "I",     # Isort Imports
+    "S",     # Bandit
+    "PT",    # Pytest
+    "B",     # BugBear
+    "N",     # Naming Conventions
+    "RUF",   # Ruff Specific Rules
+    "PTH",   # Pathlib
+    "ARG",   # Unused Args
+    "C4",    # Force Current List Comprehensions
+    "RET"    # Return Checks
+]
+
+[tool.ruff.lint.per-file-ignores]
+"test_*.py" = ["S101", "S607"]
+"_assertions.py" = ["S101"]
 
 [tool.ty.src]
 exclude = ["src/tests/files_to_parse/"]
