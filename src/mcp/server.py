@@ -18,7 +18,7 @@ _ENV_ROOT = "CODEBASE_PARSER_ROOT"
 _INSTRUCTIONS = """\
 Tools read an up-to-date SQLite code index. The index is automatically refreshed 
 incrementally on every tool call to reflect recent file changes. 
-Prefer these tools over generic file reading or search for code analysis.
+Prefer these tools over generic file reading or grep search for code analysis.
 """
 
 
