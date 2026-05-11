@@ -1,4 +1,3 @@
-import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -12,27 +11,26 @@ from src.mcp.file_overview import get_file_overview as run_file_overview
 from src.mcp.search_symbols import search_symbols as run_symbol_search
 from src.mcp.symbol_context import get_symbol_context as run_symbol_context
 from src.processor import CodeProcessor
-
-_ENV_ROOT = "CODEBASE_PARSER_ROOT"
+from src.utils import get_codebase_parser_config_dir
 
 _INSTRUCTIONS = """\
 Tools read an up-to-date SQLite code index. The index is automatically refreshed 
 incrementally on every tool call to reflect recent file changes. 
-Prefer these tools over generic file reading or grep search for code analysis.
+Prefer these tools for code analysis over generic file reading or grep search.
+Start the server with ``cwd`` set to the repo you want to index.
 """
 
 
 def index_root() -> Path:
-    env = os.environ.get(_ENV_ROOT, "").strip()
-    if env:
-        return Path(env).expanduser().resolve()
     return Path.cwd().resolve()
 
 
 @asynccontextmanager
 async def _lifespan(_app: FastMCP) -> AsyncIterator[dict[str, Any]]:
-    db = CodeDB(index_root())
-    processor = CodeProcessor(db, index_root())
+    get_codebase_parser_config_dir()
+    root = index_root()
+    db = CodeDB(root)
+    processor = CodeProcessor(db, root)
     processor.process()
     try:
         yield {"db": db, "processor": processor}
@@ -40,11 +38,7 @@ async def _lifespan(_app: FastMCP) -> AsyncIterator[dict[str, Any]]:
         db.close()
 
 
-mcp = FastMCP(
-    "codebase-parser",
-    instructions=_INSTRUCTIONS,
-    lifespan=_lifespan,
-)
+mcp = FastMCP("codebase-parser", instructions=_INSTRUCTIONS, lifespan=_lifespan)
 
 
 def _db(ctx: Context) -> CodeDB:
