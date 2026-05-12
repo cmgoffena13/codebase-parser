@@ -3,6 +3,12 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+# tmp bs
+.tmp-*
+
+tmp*
+
+
 # Claude
 .claude/
 

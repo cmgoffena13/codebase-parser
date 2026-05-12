@@ -65,6 +65,8 @@ class CodeProcessor:
             posix = posix.replace("/", ".")
             if posix.endswith(".__init__"):
                 posix = posix[:-9]
+        elif language in ("javascript", "typescript", "tsx"):
+            posix = posix.replace("/", ".")
         return posix
 
     def _process_file(self, file_name: str, directory_path: Path, full: bool) -> None:

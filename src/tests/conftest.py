@@ -70,3 +70,31 @@ def go_fixture_bytes(go_fixtures_dir: Path) -> Callable[[str], bytes]:
         return (go_fixtures_dir / name).read_bytes()
 
     return _read
+
+
+@pytest.fixture
+def javascript_parser(tmp_db: CodeDB, assigner: GlobalIDAssigner):
+    return ParserFactory.get_parser("javascript", assigner, tmp_db)
+
+
+@pytest.fixture
+def typescript_parser(tmp_db: CodeDB, assigner: GlobalIDAssigner):
+    return ParserFactory.get_parser("typescript", assigner, tmp_db)
+
+
+@pytest.fixture
+def tsx_parser(tmp_db: CodeDB, assigner: GlobalIDAssigner):
+    return ParserFactory.get_parser("tsx", assigner, tmp_db)
+
+
+@pytest.fixture
+def javascript_fixtures_dir() -> Path:
+    return Path(__file__).resolve().parent / "files_to_parse" / "javascript"
+
+
+@pytest.fixture
+def javascript_fixture_bytes(javascript_fixtures_dir: Path) -> Callable[[str], bytes]:
+    def _read(name: str) -> bytes:
+        return (javascript_fixtures_dir / name).read_bytes()
+
+    return _read
