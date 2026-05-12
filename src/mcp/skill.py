@@ -3,7 +3,7 @@ from pathlib import Path
 _SKILL_INSTRUCTIONS = """\
 ---
 name: Codebase-Parser
-description: A skill that enables you to use the Codebase-Parser MCP Server effectively.
+description: Use the Codebase-Parser MCP Server effectively.
 allowed-tools: get_directory_tree get_file_overview search_symbols get_symbol_context
 ---
 
