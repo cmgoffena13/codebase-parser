@@ -12,6 +12,9 @@ dependencies = [
     "xxhash>=3.6.0",
 ]
 
+[project.scripts]
+codebase-parser = "src.mcp.server:main"
+
 [dependency-groups]
 dev = [
     "prek>=0.3.10",

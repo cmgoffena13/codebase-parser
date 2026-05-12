@@ -1,3 +1,4 @@
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -17,11 +18,16 @@ _INSTRUCTIONS = """\
 Tools read an up-to-date SQLite code index. The index is automatically refreshed 
 incrementally on every tool call to reflect recent file changes. 
 Prefer these tools for code analysis over generic file reading or grep search.
-Start the server with ``cwd`` set to the repo you want to index.
+Start the server in the repository you want to index.
 """
 
 
 def index_root() -> Path:
+    # Claude Desktop passes workspace via env var
+    workspace = os.environ.get("CLAUDE_WORKSPACE", "").strip()
+    if workspace:
+        return Path(workspace).resolve()
+    # VS Code / Terminal passes it via CWD
     return Path.cwd().resolve()
 
 
