@@ -2,20 +2,14 @@ import ast
 import builtins
 import sys
 import typing
-from typing import Dict, List, NamedTuple, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from tree_sitter import Node, Parser
 
 from src.assigner import GlobalIDAssigner
 from src.db import CodeDB
 from src.parsers.base import ParserBase
-
-
-class StackFrame(NamedTuple):
-    symbol_id: int
-    qualified_name: str
-    kind: str
-    is_test: bool
+from src.parsers.parser_utils import StackFrame
 
 
 class PythonParser(ParserBase):
