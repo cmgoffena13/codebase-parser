@@ -1,4 +1,4 @@
-package main
+package refs
 
 import "os"
 

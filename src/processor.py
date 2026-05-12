@@ -1,6 +1,7 @@
 import os
 import time
 from pathlib import Path
+from typing import Optional
 
 import xxhash
 
@@ -58,7 +59,7 @@ class CodeProcessor:
                 "seen": True,
             }
 
-    def _normalize_path(self, path: Path, language: str = "python") -> str:
+    def _normalize_path(self, path: Path, language: Optional[str] = None) -> str:
         posix = path.with_suffix("").as_posix().lower()
         if language == "python":
             posix = posix.replace("/", ".")
@@ -95,13 +96,14 @@ class CodeProcessor:
             self.files_skipped += 1
             return
 
+        lang = FILE_EXTENSION_MAPPING.get(file_extension)
         file_row = {
             "id": file_id,
             "directory_id": directory_id,
             "name": file_name,
             "path": str(file_relative_path),
-            "normalized_path": self._normalize_path(file_relative_path),
-            "language": FILE_EXTENSION_MAPPING.get(file_extension, None),
+            "normalized_path": self._normalize_path(file_relative_path, language=lang),
+            "language": lang,
             "content_hash": file_hash,
             "line_count": line_count,
             "symbol_count": prior_symbol_count,

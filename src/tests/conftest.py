@@ -52,3 +52,21 @@ def fixture_bytes(python_fixtures_dir: Path) -> Callable[[str], bytes]:
         return (python_fixtures_dir / name).read_bytes()
 
     return _read
+
+
+@pytest.fixture
+def go_parser(tmp_db: CodeDB, assigner: GlobalIDAssigner):
+    return ParserFactory.get_parser("go", assigner, tmp_db)
+
+
+@pytest.fixture
+def go_fixtures_dir() -> Path:
+    return Path(__file__).resolve().parent / "files_to_parse" / "golang"
+
+
+@pytest.fixture
+def go_fixture_bytes(go_fixtures_dir: Path) -> Callable[[str], bytes]:
+    def _read(name: str) -> bytes:
+        return (go_fixtures_dir / name).read_bytes()
+
+    return _read

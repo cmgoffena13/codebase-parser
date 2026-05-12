@@ -1,4 +1,4 @@
-package main
+package iface
 
 type Reader interface {
 	Read(p []byte) (int, error)

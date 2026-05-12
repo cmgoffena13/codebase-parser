@@ -1,23 +1,28 @@
 from typing import ClassVar
 
+import tree_sitter_go as go_language
 import tree_sitter_python as python_language
 from tree_sitter import Language, Parser
 
 from src.assigner import GlobalIDAssigner
 from src.db import CodeDB
 from src.parsers.base import ParserBase
+from src.parsers.go_lang import GoParser
 from src.parsers.python_lang import PythonParser
 
 FILE_EXTENSION_MAPPING = {
+    ".go": "go",
     ".py": "python",
 }
 
 
 class ParserFactory:
     tree_sitter_parsers: ClassVar[dict[str, Parser]] = {
+        "go": Parser(Language(go_language.language())),
         "python": Parser(Language(python_language.language())),
     }
     parsers: ClassVar[dict[str, type[ParserBase]]] = {
+        "go": GoParser,
         "python": PythonParser,
     }
     active_tree_sitter_parsers: ClassVar[dict[str, Parser]] = {}
