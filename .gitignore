@@ -3,6 +3,9 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+# Claude
+.claude/
+
 # Database
 code.db
 *.db
