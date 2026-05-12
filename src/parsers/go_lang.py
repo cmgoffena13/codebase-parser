@@ -91,6 +91,7 @@ class GoParser(ParserBase):
         self._receiver: tuple[str, str] | None = None
         self._container_by_qn: dict[str, int] = {}
         self._container_is_test: dict[str, bool] = {}
+        self._interpreted_string_import_path_re = re.compile(r'^"([^"]*)"$')
 
     def parse(
         self, file_id: int, file_bytes: bytes
@@ -295,7 +296,7 @@ class GoParser(ParserBase):
         text = file_bytes[node.start_byte : node.end_byte].decode(
             "utf-8", errors="replace"
         )
-        m = re.match(r'^"([^"]*)"$', text.strip())
+        m = self._interpreted_string_import_path_re.match(text.strip())
         if m:
             return m.group(1)
         return None
