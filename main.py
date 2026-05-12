@@ -1,3 +1,7 @@
+"""
+Test Run the Parser.
+"""
+
 from pathlib import Path
 
 from src.db import CodeDB
@@ -8,7 +12,6 @@ from src.mcp.symbol_context import get_symbol_context
 from src.processor import CodeProcessor
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-TEST_ROOT = Path("/Users/cortlandgoffena/Documents/repos/coder")
 
 
 def main():
