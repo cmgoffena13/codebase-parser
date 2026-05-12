@@ -5,14 +5,25 @@ from src.db import CodeDB
 from src.mcp.clip import clipped_doc_lines
 
 _SYMBOLS_SQL = """
-SELECT id, parent_id, kind, qualified_name, name, line_start, line_end, signature, docstring
+SELECT 
+    id, 
+    parent_id, 
+    kind, 
+    qualified_name, 
+    name, 
+    line_start, 
+    line_end, 
+    signature, 
+    docstring
 FROM symbols
 WHERE file_id = ?
 ORDER BY line_start, line_end, qualified_name
 """
 
 _IMPORTS_SQL = """
-SELECT line_number, signature
+SELECT 
+    line_number, 
+    signature
 FROM imports
 WHERE file_id = ?
 ORDER BY line_number

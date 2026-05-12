@@ -30,19 +30,20 @@ CREATE TABLE IF NOT EXISTS files (
     directory_id    INTEGER REFERENCES directories(id),
     name            TEXT NOT NULL,                       
     path            TEXT UNIQUE NOT NULL,   
-    normalized_path TEXT UNIQUE NOT NULL,             
+    normalized_path TEXT NOT NULL,             
     language        TEXT,                                          
     content_hash    TEXT NOT NULL,                               
     line_count      INTEGER NOT NULL DEFAULT 0,
     symbol_count    INTEGER NOT NULL DEFAULT 0
 );
+CREATE UNIQUE INDEX IF NOT EXISTS files_normalized_path_index ON files (normalized_path);
 
 CREATE TABLE IF NOT EXISTS symbols (
     id              INTEGER NOT NULL PRIMARY KEY,
     file_id         INTEGER NOT NULL REFERENCES files(id),
     parent_id       INTEGER REFERENCES symbols(id), 
     name            TEXT NOT NULL,                  
-    qualified_name  TEXT UNIQUE NOT NULL,                        
+    qualified_name  TEXT NOT NULL,                        
     kind            TEXT NOT NULL,                  
     line_start      INTEGER NOT NULL,                
     line_end        INTEGER NOT NULL,                
@@ -55,6 +56,7 @@ CREATE TABLE IF NOT EXISTS symbols (
     is_test         BOOLEAN NOT NULL DEFAULT FALSE               
 );
 CREATE INDEX IF NOT EXISTS symbols_file_id_index ON symbols (file_id);
+CREATE UNIQUE INDEX IF NOT EXISTS symbols_qualified_name_index ON symbols (qualified_name);
 
 CREATE TABLE IF NOT EXISTS symbol_references_staging (
     id                          INTEGER NOT NULL,
@@ -93,6 +95,7 @@ CREATE TABLE IF NOT EXISTS imports (
     watermark             INTEGER NOT NULL DEFAULT (strftime('%s','now'))
 );
 CREATE INDEX IF NOT EXISTS imports_file_id_index ON imports (file_id);
+CREATE INDEX IF NOT EXISTS imports_import_path_index ON imports (import_path, watermark);
 
 
 /* NOTE: Full Text Search "Tables" for symbols */

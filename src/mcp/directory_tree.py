@@ -3,10 +3,23 @@ from collections import defaultdict
 from src.db import CodeDB
 
 _TREE_SQL = """
-SELECT 'directory' AS row_type, id, parent_id AS parent_id, name, NULL AS line_count, NULL AS symbol_count
+SELECT 
+    'directory' AS row_type, 
+    id, 
+    parent_id AS parent_id, 
+    name, 
+    NULL AS line_count, 
+    NULL AS symbol_count
 FROM directories
 UNION ALL
-SELECT 'file' AS row_type, id, directory_id AS parent_id, name, line_count, symbol_count FROM files
+SELECT 
+    'file' AS row_type, 
+    id, 
+    directory_id AS parent_id, 
+    name, 
+    line_count, 
+    symbol_count 
+FROM files
 """
 
 

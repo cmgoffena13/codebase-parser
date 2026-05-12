@@ -7,17 +7,28 @@ _MAX_REFERENCE_CONTEXT = 150
 _REFERENCE_FETCH_LIMIT = 50
 
 _SYMBOL_ROW_SQL = """
-SELECT s.line_start, s.line_end, s.qualified_name, f.path AS file_path, s.kind,
-       f.language AS file_language
+SELECT 
+    s.line_start, 
+    s.line_end, 
+    s.qualified_name, 
+    f.path AS file_path, 
+    s.kind,
+    f.language AS file_language
 FROM symbols AS s
-JOIN files AS f ON f.id = s.file_id
+INNER JOIN files AS f 
+    ON f.id = s.file_id
 WHERE s.qualified_name = ?
 """
 
 _REFERENCES_SQL = """
-SELECT f.path AS source_path, sr.source_line, sr.context, sr.ref_kind
+SELECT 
+    f.path AS source_path, 
+    sr.source_line, 
+    sr.context, 
+    sr.ref_kind
 FROM symbol_references AS sr
-JOIN files AS f ON f.id = sr.source_file_id
+INNER JOIN files AS f 
+    ON f.id = sr.source_file_id
 WHERE sr.ref_symbol_qualified_name = ?
 ORDER BY sr.ref_kind, f.path, sr.source_line
 LIMIT ?
