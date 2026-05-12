@@ -7,7 +7,7 @@ def index_symbols(symbols: list[dict]) -> dict:
 
 
 def assert_reference_shape(ref: dict, expected_file_id: int) -> None:
-    assert ref["ref_kind"] in {"call", "access", "type_annotation"}
+    assert ref["ref_kind"] in {"call", "access", "type_annotation", "type"}
     assert isinstance(ref["ref_symbol_name"], str)
     assert ref["ref_symbol_name"]
     assert isinstance(ref["ref_symbol_qualified_name"], str)

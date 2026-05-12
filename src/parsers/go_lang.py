@@ -648,6 +648,84 @@ class GoParser(ParserBase):
         self._register_container(qualified_name, kind, symbol_id, is_test)
         return row
 
+    def _emit_embedded_struct_field(
+        self,
+        file_id: int,
+        parent_id: int,
+        parent_qn: str,
+        field_node: Node,
+        type_node: Node,
+        file_bytes: bytes,
+    ) -> None:
+        base = self._type_identifier_name(type_node)
+        if not base:
+            return
+        name = base
+        qn = f"{parent_qn}.{name}"
+        line_start = field_node.start_point.row + 1
+        line_end = field_node.end_point.row + 1
+        sig = self._normalize_signature_bytes(
+            file_bytes, field_node.start_byte, field_node.end_byte, tail_rstrip=True
+        )
+        kind = "variable"
+        is_test = self.stack[-1].is_test if self.stack else False
+        key = (qn, kind)
+        if key in self.symbols_snapshot:
+            self.symbols_snapshot[key]["seen"] = True
+            if (line_start, line_end) != (
+                self.symbols_snapshot[key]["line_start"],
+                self.symbols_snapshot[key]["line_end"],
+            ):
+                sid = self.symbols_snapshot[key]["id"]
+                self.symbols_snapshot[key]["line_start"] = line_start
+                self.symbols_snapshot[key]["line_end"] = line_end
+                self.symbols.append(
+                    self._variable_symbol_dict(
+                        sid,
+                        file_id,
+                        parent_id,
+                        name,
+                        qn,
+                        kind,
+                        line_start,
+                        line_end,
+                        sig,
+                        is_test,
+                    )
+                )
+        else:
+            sid = self.assigner.reserve("symbols", 1)[0]
+            self.symbols_snapshot[key] = {
+                "id": sid,
+                "seen": True,
+                "line_start": line_start,
+                "line_end": line_end,
+            }
+            self.symbols.append(
+                self._variable_symbol_dict(
+                    sid,
+                    file_id,
+                    parent_id,
+                    name,
+                    qn,
+                    kind,
+                    line_start,
+                    line_end,
+                    sig,
+                    is_test,
+                )
+            )
+
+        ref_name = (
+            type_node.text.decode("utf-8", errors="replace")
+            if type_node.text is not None
+            else base
+        )
+        if self._should_skip_reference_target(base, ref_kind="type"):
+            return
+        resolved = self._resolve_selector_target(base)
+        self._emit_ref(file_id, ref_name, resolved, field_node, "type")
+
     def _emit_field_symbol(
         self,
         file_id: int,
@@ -656,6 +734,7 @@ class GoParser(ParserBase):
         field_node: Node,
         file_bytes: bytes,
     ) -> None:
+        type_node = field_node.child_by_field_name("type")
         name_node = field_node.child_by_field_name("name")
         if name_node is None:
             for ch in field_node.children:
@@ -663,6 +742,10 @@ class GoParser(ParserBase):
                     name_node = ch
                     break
         if name_node is None or name_node.text is None:
+            if type_node is not None:
+                self._emit_embedded_struct_field(
+                    file_id, parent_id, parent_qn, field_node, type_node, file_bytes
+                )
             return
         name = name_node.text.decode("utf-8")
         qn = f"{parent_qn}.{name}"
@@ -732,6 +815,7 @@ class GoParser(ParserBase):
         if name_node is None or name_node.text is None:
             return
         name = name_node.text.decode("utf-8")
+        tnode = spec.child_by_field_name("type")
         kind = "constant" if is_const else "variable"
         qn = self._qn(name)
         line_start = spec.start_point.row + 1
@@ -764,6 +848,8 @@ class GoParser(ParserBase):
                         is_test,
                     )
                 )
+            if tnode is not None:
+                self._extract_type_annotation(tnode, file_id, file_bytes)
             return
         sid = self.assigner.reserve("symbols", 1)[0]
         self.symbols_snapshot[key] = {
@@ -786,6 +872,8 @@ class GoParser(ParserBase):
                 is_test,
             )
         )
+        if tnode is not None:
+            self._extract_type_annotation(tnode, file_id, file_bytes)
 
     def _process_node(self, node: Node, file_id: int, file_bytes: bytes) -> None:
         if node.type == "field_declaration":
@@ -801,6 +889,12 @@ class GoParser(ParserBase):
                 self._emit_var_const(file_id, node, file_bytes, is_const=True)
             elif parent and parent.type == "var_declaration":
                 self._emit_var_const(file_id, node, file_bytes, is_const=False)
+            return
+
+        if node.type == "generic_type":
+            if node.parent is not None and node.parent.type == "type_elem":
+                return
+            self._extract_type_annotation(node, file_id, file_bytes)
             return
 
         if (
@@ -884,9 +978,22 @@ class GoParser(ParserBase):
         target = self._call_function_text(node)
         if not target:
             return
-        if self._should_skip_reference_target(target, ref_kind="call"):
-            return
-        resolved = self._resolve_selector_target(target)
+
+        if fn is not None and fn.type == "index_expression":
+            op = fn.child_by_field_name("operand")
+            if op is not None and op.type == "identifier" and op.text:
+                base = op.text.decode("utf-8")
+                if self._should_skip_reference_target(base, ref_kind="call"):
+                    return
+                resolved = self._resolve_selector_target(base)
+            else:
+                if self._should_skip_reference_target(target, ref_kind="call"):
+                    return
+                resolved = self._resolve_selector_target(target)
+        else:
+            if self._should_skip_reference_target(target, ref_kind="call"):
+                return
+            resolved = self._resolve_selector_target(target)
         self._emit_ref(
             file_id,
             target,
@@ -932,6 +1039,11 @@ class GoParser(ParserBase):
         root = target.split(".", 1)[0]
         if ref_kind == "call" and root in _GO_BUILTIN_CALLS:
             return True
+        if ref_kind in ("type_annotation", "type"):
+            if "[" in root:
+                root = root.split("[", 1)[0]
+            if root in _GO_TYPE_SKIP:
+                return True
         if root in self._import_roots:
             path = self._import_roots[root]
             if _go_std_heuristic(path):
@@ -969,6 +1081,29 @@ class GoParser(ParserBase):
         p = type_node.parent
         if p is not None and p.type == "type_elem":
             return
+        if type_node.type == "generic_type":
+            inner = type_node.child_by_field_name("type")
+            if inner is None:
+                return
+            simple = self._simple_type_name(inner)
+            if not simple or simple in _GO_TYPE_SKIP:
+                return
+            if self._should_skip_reference_target(simple, ref_kind="type_annotation"):
+                return
+            display = (
+                type_node.text.decode("utf-8", errors="replace")
+                if type_node.text is not None
+                else simple
+            )
+            resolved = self._resolve_selector_target(simple)
+            self._emit_ref(
+                file_id,
+                display,
+                resolved,
+                type_node,
+                "type_annotation",
+            )
+            return
         simple = self._simple_type_name(type_node)
         if not simple or simple in _GO_TYPE_SKIP:
             return
@@ -976,15 +1111,25 @@ class GoParser(ParserBase):
         if self._should_skip_reference_target(target, ref_kind="type_annotation"):
             return
         resolved = self._resolve_selector_target(target)
+        raw = (
+            type_node.text.decode("utf-8", errors="replace")
+            if type_node.text is not None
+            else ""
+        )
+        display = raw if ("[" in raw and "]" in raw) else simple
         self._emit_ref(
             file_id,
-            target,
+            display,
             resolved,
             type_node,
             "type_annotation",
         )
 
     def _simple_type_name(self, type_node: Node) -> Optional[str]:
+        if type_node.type == "generic_type":
+            inner = type_node.child_by_field_name("type")
+            if inner is not None:
+                return self._simple_type_name(inner)
         if type_node.type == "qualified_type" and type_node.text:
             return type_node.text.decode("utf-8")
         if type_node.type == "type_identifier" and type_node.text:
